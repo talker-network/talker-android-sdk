@@ -90,7 +90,7 @@ object SocketHandler {
                         )
                         // if the audio sent from server to us is not the one
                         // which we are currently playing speaking than only play that audio
-                        if (senderId != userData.user_id) {
+//                        if (senderId != userData.user_id) {
                             context.sendBroadcast(
                                 Intent()
                                     .setPackage(context.packageName)
@@ -99,7 +99,7 @@ object SocketHandler {
                                         putExtra("media_link", url)
                                     }
                             )
-                        }
+//                        }
 
                         if (GlobalVariables.printLogs) {
                             Log.d(LOG_TAG, "Socket broadcast_start channel object : $arg")
@@ -134,6 +134,8 @@ object SocketHandler {
 
     fun closeConnection() {
         socket?.disconnect()
+        socket?.off()
+        socket?.close()
     }
 
     fun broadCastStart(channelID: String, onAck: (Array<Any>) -> Unit) {
@@ -141,7 +143,6 @@ object SocketHandler {
             put("channel_id", channelID)
         }
         socket?.emit("broadcast_start", payload, Ack { args ->
-//            val success = args?.getOrNull(0) as? Boolean ?: false
             onAck(args)
         })
     }

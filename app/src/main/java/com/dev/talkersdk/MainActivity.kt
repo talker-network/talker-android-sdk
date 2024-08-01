@@ -43,10 +43,13 @@ import com.dev.talkersdk.sharedPreference.SharedPreference
 import com.dev.talkersdk.webrtc.EventListener
 import com.dev.talkersdk.webrtc.Talker
 import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private var showPushToTalkButton = false
-
 
     @OptIn(UnstableApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -81,6 +84,36 @@ class MainActivity : ComponentActivity() {
             var isLoading by remember {
                 mutableStateOf(false)
             }
+            fun closeConnection() {
+                isLoading = true
+                Talker.logoutUser(
+                    onLogoutSuccess = {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "User sign out success",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        CoroutineScope(Dispatchers.Main).launch {
+                            delay(1000)
+                            isLoading = false
+                        }
+                    },
+                    onLogoutFailure = {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "User sign out failure",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        CoroutineScope(Dispatchers.Main).launch {
+                            delay(1000)
+                            isLoading = false
+                        }
+                    }
+                )
+            }
+
+
+
             LaunchedEffect(key1 = Unit) {
                 Log.i(
                     "User Data : ",
@@ -108,6 +141,9 @@ class MainActivity : ComponentActivity() {
                         verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        var labelText by remember {
+                            mutableStateOf("")
+                        }
                         if (!Talker.isUserLoggedIn()) {
                             var userId by remember {
                                 mutableStateOf("")
@@ -122,12 +158,55 @@ class MainActivity : ComponentActivity() {
                                         userId,
                                         fcmToken,
                                         onLoginSuccess = {
-                                            Toast.makeText(this@MainActivity, "User login success", Toast.LENGTH_SHORT).show()
-                                            isLoading = false
+                                            Toast.makeText(
+                                                this@MainActivity,
+                                                "User login success",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                            Talker.establishConnection(
+                                                applicationContext,
+                                                isMaster = false,
+                                                eventListener = object : EventListener {
+                                                    override fun onConnectionSuccess() {
+                                                        Toast.makeText(
+                                                            this@MainActivity,
+                                                            "Connection successful",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                        isLoading = false
+                                                        showPushToTalkButton = true
+                                                    }
+
+                                                    override fun onConnectionFailure(errorMessage: String) {
+                                                        Toast.makeText(
+                                                            this@MainActivity,
+                                                            "Connection failure $errorMessage",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                        Log.d(
+                                                            "Connection failure",
+                                                            "Connection failed with error : $errorMessage"
+                                                        )
+//                                                        closeConnection()
+                                                    }
+
+                                                    override fun onConnectionClosed() {
+                                                        Toast.makeText(
+                                                            this@MainActivity,
+                                                            "Connection closed",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                    }
+                                                }
+                                            )
                                         },
                                         onLoginFailure = {
-                                            Toast.makeText(this@MainActivity, "User login failed", Toast.LENGTH_SHORT).show()
-                                            isLoading = false
+                                            Toast.makeText(
+                                                this@MainActivity,
+                                                "User login failed",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+//                                            closeConnection()
                                         }
                                     )
                                 }
@@ -150,20 +229,66 @@ class MainActivity : ComponentActivity() {
                                         name,
                                         fcmToken,
                                         onRegisterSuccess = {
-                                            Toast.makeText(this@MainActivity, "User register success", Toast.LENGTH_SHORT).show()
-                                            isLoading = false
+                                            Toast.makeText(
+                                                this@MainActivity,
+                                                "User register success",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                            Talker.establishConnection(
+                                                applicationContext,
+                                                isMaster = false,
+                                                eventListener = object : EventListener {
+                                                    override fun onConnectionSuccess() {
+                                                        Toast.makeText(
+                                                            this@MainActivity,
+                                                            "Connection successful",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                        isLoading = false
+                                                        showPushToTalkButton = true
+                                                    }
+
+                                                    override fun onConnectionFailure(errorMessage: String) {
+                                                        Toast.makeText(
+                                                            this@MainActivity,
+                                                            "Connection failure $errorMessage",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                        Log.d(
+                                                            "Connection failure",
+                                                            "Connection failed with error : $errorMessage"
+                                                        )
+                                                        closeConnection()
+                                                        showPushToTalkButton = false
+                                                    }
+
+                                                    override fun onConnectionClosed() {
+                                                        Toast.makeText(
+                                                            this@MainActivity,
+                                                            "Connection closed",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                        closeConnection()
+                                                        showPushToTalkButton = false
+                                                    }
+                                                }
+                                            )
                                         },
                                         onRegisterFailure = {
-                                            Toast.makeText(this@MainActivity, "User register failed", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(
+                                                this@MainActivity,
+                                                "User register failed",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
                                             isLoading = false
+//                                            closeConnection()
                                         }
                                     )
                                 }
                             }) {
                                 Text(text = "Create")
                             }
-                        }else{
-                            if (showPushToTalkButton){
+                        } else {
                             val interactionSource = remember {
                                 MutableInteractionSource()
                             }
@@ -172,28 +297,38 @@ class MainActivity : ComponentActivity() {
                                     when (it) {
                                         is PressInteraction.Press -> {
                                             Talker.startPttAudio { isChannelAvailable ->
-                                                if (!isChannelAvailable){
-                                                    Toast.makeText(applicationContext, "The other person is talking...", Toast.LENGTH_SHORT)
+                                                if (!isChannelAvailable) {
+                                                    labelText =
+                                                        "Connecting... The other person is talking..."
+                                                    Toast.makeText(
+                                                        applicationContext,
+                                                        "The other person is talking...",
+                                                        Toast.LENGTH_SHORT
+                                                    )
                                                         .show()
+                                                } else {
+                                                    labelText = "Sending audio to remote..."
                                                 }
                                             }
                                         }
 
                                         is PressInteraction.Cancel -> {
                                             Talker.stopPttAudio()
+                                            labelText = "Stopped speaking..."
                                         }
 
                                         is PressInteraction.Release -> {
                                             Talker.stopPttAudio()
+                                            labelText = "Stopped speaking..."
                                         }
                                     }
                                 }
                             }
 
+                            Text(text = labelText)
+                            Spacer(modifier = Modifier.height(60.dp))
                             Button(
-                                onClick = {
-
-                                },
+                                onClick = {},
                                 modifier = Modifier.padding(16.dp),
                                 interactionSource = interactionSource
                             ) {
@@ -203,355 +338,18 @@ class MainActivity : ComponentActivity() {
 
                             Button(
                                 onClick = {
-                                    isLoading = true
-                                    showPushToTalkButton = false
                                     Talker.closeConnection()
+                                    closeConnection()
                                 },
                                 modifier = Modifier.padding(16.dp)
                             ) {
-                                Text(text = "Stop")
-                            }
-                            }else{
-                                // connect as viewer and connect as master buttons
-                                // logout button as well
-                                Button(onClick = {
-                                    isLoading = true
-                                    Talker.establishConnection(
-                                        applicationContext,
-                                        isMaster = false,
-                                        eventListener = object : EventListener {
-                                            override fun onConnectionSuccess() {
-                                                Toast.makeText(
-                                                    this@MainActivity,
-                                                    "Connection successful",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                                isLoading = false
-                                                showPushToTalkButton = true
-                                            }
-
-                                            override fun onConnectionFailure(errorMessage: String) {
-                                                Toast.makeText(
-                                                    this@MainActivity,
-                                                    "Connection failure $errorMessage",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                                Log.d(
-                                                    "Connection failure",
-                                                    "Connection failed with error : $errorMessage"
-                                                )
-                                                isLoading = false
-                                                showPushToTalkButton = false
-                                            }
-
-                                            override fun onConnectionClosed() {
-                                                Toast.makeText(
-                                                    this@MainActivity,
-                                                    "Connection closed",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                                isLoading = false
-                                                showPushToTalkButton = false
-                                            }
-                                        }
-                                    )
-                                }) {
-                                    Text(text = "Connect as Viewer")
-                                }
-
-                                Spacer(modifier = Modifier.height(20.dp))
-
-                                Button(onClick = {
-                                    isLoading = true
-                                    Talker.establishConnection(
-                                        applicationContext,
-                                        isMaster = false,
-                                        eventListener = object : EventListener {
-                                            override fun onConnectionSuccess() {
-                                                Toast.makeText(
-                                                    this@MainActivity,
-                                                    "Connection successful",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                                isLoading = false
-                                                showPushToTalkButton = true
-                                            }
-
-                                            override fun onConnectionFailure(errorMessage: String) {
-                                                Toast.makeText(
-                                                    this@MainActivity,
-                                                    "Connection failure",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                                isLoading = false
-                                                showPushToTalkButton = false
-                                            }
-
-                                            override fun onConnectionClosed() {
-                                                Toast.makeText(
-                                                    this@MainActivity,
-                                                    "Connection closed",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                                isLoading = false
-                                                showPushToTalkButton = false
-                                            }
-                                        }
-                                    )
-                                }) {
-                                    Text(text = "Connect as Master")
-                                }
-
-                                Spacer(modifier = Modifier.height(20.dp))
-
-                                Button(onClick = {
-                                    isLoading = true
-                                    Talker.logoutUser(
-                                        onLogoutSuccess = {
-                                            Toast.makeText(this@MainActivity, "User sign out success", Toast.LENGTH_SHORT).show()
-                                            isLoading = false
-                                        },
-                                        onLogoutFailure = {
-                                            Toast.makeText(this@MainActivity, "User sign out failure", Toast.LENGTH_SHORT).show()
-                                            isLoading = false
-                                        }
-                                    )
-                                }) {
-                                    Text(text = "Logout")
-                                }
+                                Text(text = "Stop / Logout")
                             }
                         }
-
-//                        if (showPushToTalkButton) {
-//                            val mSocket = SocketHandler.getSocket()
-//                            val interactionSource = remember {
-//                                MutableInteractionSource()
-//                            }
-//                            LaunchedEffect(key1 = interactionSource) {
-//                                interactionSource.interactions.collect() {
-//                                    when (it) {
-//                                        is PressInteraction.Press -> {
-//                                            scope.launch(Dispatchers.IO) {
-//                                                initWsConnection?.startSpeaking { isChannelAvailable ->
-//
-//                                                }
-//                                            }
-//                                        }
-//
-//                                        is PressInteraction.Cancel -> {
-//                                            scope.launch(Dispatchers.IO) {
-//                                                initWsConnection?.stopSpeaking()
-//                                            }
-//                                        }
-//
-//                                        is PressInteraction.Release -> {
-//                                            scope.launch(Dispatchers.IO) {
-//                                                initWsConnection?.stopSpeaking()
-//                                            }
-//                                        }
-//                                    }
-//                                }
-//                            }
-//
-//                            Button(
-//                                onClick = {
-//
-//                                },
-//                                modifier = Modifier.padding(16.dp),
-//                                interactionSource = interactionSource
-//                            ) {
-//                                Text(text = "Push to talk")
-//                            }
-//                            Spacer(modifier = Modifier.height(50.dp))
-//
-//                            Button(
-//                                onClick = {
-//                                    isLoading = true
-//                                    showPushToTalkButton = false
-//                                    initWsConnection?.closeConnection()
-//                                    isLoading = false
-//                                },
-//                                modifier = Modifier.padding(16.dp)
-//                            ) {
-//                                Text(text = "Stop")
-//                            }
-//                        } else {
-//                            if (TalkerSDKApplication().auth?.isSignedIn == false) {
-//                                FirebaseMessaging.getInstance().token.addOnCompleteListener(OnCompleteListener { task ->
-//                                    if (!task.isSuccessful) {
-//                                        Log.w("FCM", "Fetching FCM registration token failed", task.exception)
-//                                        return@OnCompleteListener
-//                                    }
-//                                    // Get new FCM registration token
-//                                    token = task.result
-//                                    Log.w("FCM", "Token : $token", task.exception)
-//                                })
-//                                var userId by remember {
-//                                    mutableStateOf("")
-//                                }
-//                                OutlinedTextField(value = userId, onValueChange = { userId = it })
-//                                Spacer(modifier = Modifier.height(20.dp))
-//                                Button(onClick = {
-//                                    if (userId.isNotEmpty()) {
-//                                        isLoading = true
-//                                        WebrtcConnection.loginUser(
-//                                            this@MainActivity,
-//                                            userId,
-//                                            token,
-//                                            onLoginSuccess = {
-//                                                isLoading = false
-//                                            },
-//                                            onLoginFailure = {
-//                                                isLoading = false
-//                                            }
-//                                        )
-//                                    }
-//                                }) {
-//                                    Text(text = "Login")
-//                                }
-//
-//                                Spacer(modifier = Modifier.height(20.dp))
-//
-//                                var name by remember {
-//                                    mutableStateOf("")
-//                                }
-//                                OutlinedTextField(value = name, onValueChange = { name = it })
-//                                Spacer(modifier = Modifier.height(20.dp))
-//                                Button(onClick = {
-//                                    if (name.isNotEmpty()) {
-//                                        isLoading = true
-//
-//                                        sdkCreateUser(this@MainActivity,
-//                                            name = name,
-//                                            onSuccess = { res ->
-//                                                sharedPreference.setUserData(res.data)
-//                                                TalkerSDKApplication().auth?.signIn(res.data.user_id,
-//                                                    res.data.a_pass,
-//                                                    emptyMap(),
-//                                                    mapOf(
-//                                                        "name" to res.data.name,
-//                                                        "user_id" to res.data.user_id,
-//                                                        "user_auth_token" to res.data.user_auth_token
-//                                                    ),
-//                                                    object : Callback<SignInResult> {
-//                                                        override fun onResult(result: SignInResult?) {
-//                                                            isLoading = false
-//                                                            runOnUiThread {
-//                                                                Toast.makeText(
-//                                                                    this@MainActivity,
-//                                                                    "Sign in successful.",
-//                                                                    Toast.LENGTH_SHORT
-//                                                                ).show()
-//                                                            }
-//                                                        }
-//
-//                                                        override fun onError(e: java.lang.Exception?) {
-//                                                            runOnUiThread {
-//                                                                e?.printStackTrace()
-//                                                                Toast.makeText(
-//                                                                    this@MainActivity,
-//                                                                    "Sign in failed.",
-//                                                                    Toast.LENGTH_SHORT
-//                                                                ).show()
-//                                                            }
-//                                                        }
-//                                                    })
-//                                            },
-//                                            onError = {},
-//                                            onInternetNotAvailable = {},
-//                                            fcmToken = token
-//                                        )
-//                                    }
-//                                }) {
-//                                    Text(text = "Create")
-//                                }
-//                            } else {
-//                                Button(onClick = {
-//                                    isLoading = true
-//                                    scope.launch(Dispatchers.IO) {
-////                                        master = false
-////                                        mCreds = TalkerSDKApplication().auth.awsCredentials
-////                                        Log.d(LOG_TAG, "mCreds : $mCreds")
-////                                        if (initWsConnection?.updateSignalingChannelInfo(
-////                                                mRegion,
-////                                                mChannelName,
-////                                                ChannelRole.VIEWER
-////                                            ) != true
-////                                        ) {
-////                                            return@launch
-////                                        }
-////                                        mClientId =
-////                                            sharedPreference.getUserData().user_auth_token
-////                                                .split("|")
-////                                                .getOrNull(2) ?: ""
-////                                        initWebRtcConnection {
-////                                            SocketHandler.setSocket(sharedPreference.getUserData().user_auth_token)
-////                                            SocketHandler.establishConnection(this@MainActivity)
-////                                            runOnUiThread {
-////                                                isLoading = false
-////                                            }
-////                                        }
-//                                    }
-//                                }) {
-//                                    Text(text = "Connect as Viewer")
-//                                }
-//
-//                                Spacer(modifier = Modifier.height(20.dp))
-//
-//                                Button(onClick = {
-//                                    isLoading = true
-//                                    master = true
-//
-//
-//                                    scope.launch(
-//                                        Dispatchers.IO
-//                                    ) {
-////                                        mCreds = TalkerSDKApplication().auth.awsCredentials
-////                                        Log.d(LOG_TAG, "mCreds : $mCreds")
-////                                        if (initWsConnection?.updateSignalingChannelInfo(
-////                                                mRegion,
-////                                                mChannelName,
-////                                                ChannelRole.MASTER
-////                                            ) != true
-////                                        ) {
-////                                            return@launch
-////                                        }
-////                                        mClientId =
-////                                            sharedPreference.getUserData().user_auth_token
-////                                                .split("|")
-////                                                .getOrNull(2) ?: ""
-////                                        initWebRtcConnection {
-////                                            SocketHandler.setSocket(sharedPreference.getUserData().user_auth_token)
-////                                            SocketHandler.establishConnection(this@MainActivity)
-////                                            runOnUiThread {
-////                                                isLoading = false
-////                                            }
-////                                        }
-//
-//                                    }
-//                                }) {
-//                                    Text(text = "Connect as Master")
-//                                }
-//
-//                                Spacer(modifier = Modifier.height(20.dp))
-//
-//                                Button(onClick = {
-//                                    isLoading = true
-//                                    scope.launch(Dispatchers.IO) {
-//                                        TalkerSDKApplication().auth?.signOut(
-//                                            SignOutOptions.Builder().signOutGlobally(true).build()
-//                                        )
-//                                    }.invokeOnCompletion {
-//                                        isLoading = false
-//                                    }
-//                                }) {
-//                                    Text(text = "Logout")
-//                                }
-//                            }
-//                        }
                     }
                 }
             }
+
         }
     }
 
@@ -559,5 +357,6 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         Talker.closeConnection()
+        Talker.logoutUser()
     }
 }

@@ -36,9 +36,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             intent?.extras?.getString("type").toString()
         )
         // Handle the received message
-        val notificationTitle = intent?.extras?.getString("title")
-        val notificationBody = intent?.extras?.getString("body")
-        //        if (!notificationTitle.isNullOrEmpty()){
+        val notificationTitle = "Audio message"
+        val notificationBody = "Playing remote audio message..."
         val notificationManager = getSystemService(NotificationManager::class.java)
         val channel = NotificationChannel(
             CHANNEL_ID, CHANNEL_NAME, IMPORTANCE
@@ -59,21 +58,23 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         // notify the user
         notificationManager.notify(
-            Random.nextInt(),
+            1,
             notificationBuilder.build()
         )
 
         // extract the music's link form intent and play it using exoplayer
-        Handler(Looper.getMainLooper()).post {
-            val url = JsonParser.parseString(intent?.extras?.get("data")?.toString()).asJsonObject["media_link"].asString
-            sendBroadcast(
-                Intent()
-                    .setPackage(this.packageName)
-                    .setAction("audio_player.sdk")
-                    .apply {
-                        putExtra("media_link", url)
-                    }
-            )
+        intent?.extras?.get("data")?.toString()?.let {
+            Handler(Looper.getMainLooper()).post {
+                val url = JsonParser.parseString(intent?.extras?.get("data")?.toString()).asJsonObject["media_link"].asString
+                sendBroadcast(
+                    Intent()
+                        .setPackage(this.packageName)
+                        .setAction("audio_player.sdk")
+                        .apply {
+                            putExtra("media_link", url)
+                        }
+                )
+            }
         }
     }
 

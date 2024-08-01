@@ -21,6 +21,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import network.talker.app.dev.R
+import kotlin.random.Random
 
 class AudioPlayerService : Service() {
 
@@ -52,11 +53,13 @@ class AudioPlayerService : Service() {
         registerReceiver(broadCastReceiver, IntentFilter("audio_player.sdk"), RECEIVER_NOT_EXPORTED)
     }
 
+    @OptIn(UnstableApi::class)
     private fun playAudio(){
-        Log.i(
-            "playing audio",
-            "playing audio..."
+        Log.d(
+            "play_audio",
+            "play_audio called..."
         )
+        val notificationManager = getSystemService(NotificationManager::class.java)
         player = ExoPlayer.Builder(this@AudioPlayerService).build()
         player?.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -64,6 +67,8 @@ class AudioPlayerService : Service() {
                     mediaLinkList.removeAt(0)
                     if (mediaLinkList.isNotEmpty()){
                         playAudio()
+                    }else{
+                        notificationManager.cancel(1)
                     }
                 }
             }
@@ -74,7 +79,6 @@ class AudioPlayerService : Service() {
             MediaItem.fromUri(hlsUri)
         )
         player?.addMediaSource(hlsMediaSource)
-        player?.addMediaItem(MediaItem.fromUri(hlsUri))
         player?.prepare()
         player?.apply {
             playWhenReady = true
@@ -98,7 +102,7 @@ class AudioPlayerService : Service() {
             .setShowWhen(true)
             .setAutoCancel(false)
             .build()
-        startForeground(1, notification)
+        startForeground(Random.nextInt(from = 2, until = Int.MAX_VALUE), notification)
         return START_STICKY
     }
 

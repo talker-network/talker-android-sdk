@@ -111,7 +111,20 @@ object Talker {
     fun isUserLoggedIn(): Boolean {
         return KinesisTalkerApp.auth.isSignedIn
     }
-    
+
+    fun getCurrentUserId(context: Context) : String {
+        val sharedPreference = SharedPreference(context)
+        return sharedPreference.getUserData().user_id
+    }
+
+    fun isChannelAvailable(channelId : String) : Boolean {
+        var isChannelAvailable = false
+        SocketHandler.broadCastStart(channelId) { ack ->
+            isChannelAvailable = ack.getOrNull(0) == true
+        }
+        return isChannelAvailable
+    }
+
     fun loginUser(
         context: Context,
         userName: String,
@@ -173,7 +186,7 @@ object Talker {
         val sharedPreference = SharedPreference(context)
         sdkCreateUser(context, name = name, onSuccess = { res ->
             sharedPreference.setUserData(res.data)
-            TalkerSDKApplication().auth.signIn(res.data.user_id,
+            TalkerSDKApplication().auth.signIn(res.data.a_username,
                 res.data.a_pass,
                 emptyMap(),
                 mapOf(
@@ -691,7 +704,6 @@ object Talker {
                                 },
                                 applicationContext,
                                 client!!,
-//                    printStatsExecutor,
                                 CHANNEL_ID,
                                 mNotificationId = {
                                     mNotificationId++
