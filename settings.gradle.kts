@@ -21,4 +21,5 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Talker SDK"
-include(":app")
+include(":sample")
+include(":talker-sdk")
