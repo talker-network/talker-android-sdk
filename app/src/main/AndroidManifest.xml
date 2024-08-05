@@ -18,7 +18,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <application
-        android:name="com.dev.talkersdk.TalkerSDKApplication"
+        android:name="com.dev.talkersdk.sdk.TalkerSDKApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -30,7 +30,7 @@
         tools:targetApi="31"
         android:usesCleartextTraffic="true">
         <activity
-            android:name="com.dev.talkersdk.MainActivity"
+            android:name="com.dev.talkersdk.sample.MainActivity"
             android:exported="true"
             android:theme="@style/Theme.TalkerSDK"
             android:launchMode="singleTop"
@@ -42,14 +42,16 @@
             </intent-filter>
         </activity>
 
-        <service android:name="com.dev.talkersdk.messaging.MyFirebaseMessagingService"
+<!--        service that will receive the notifications and get audio that will be played-->
+        <service android:name="com.dev.talkersdk.sdk.messaging.TalkerFirebaseMessagingService"
             android:exported="false">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
 
-        <service android:name="com.dev.talkersdk.player.AudioPlayerService"
+<!--        service that will actually play the audio file in the background-->
+        <service android:name="com.dev.talkersdk.sdk.player.AudioPlayerService"
             android:exported="false"
             android:foregroundServiceType="specialUse"
             android:label="@string/app_name"
