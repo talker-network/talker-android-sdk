@@ -16,7 +16,7 @@ import androidx.compose.runtime.setValue
 import com.google.firebase.messaging.FirebaseMessaging
 import com.talkersdk.sample.constants.Constants
 import com.talkersdk.sample.ui.theme.TalkerSDKTheme
-import network.talker.app.dev.webrtc.Talker
+import network.talker.app.dev.Talker
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

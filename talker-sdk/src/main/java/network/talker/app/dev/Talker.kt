@@ -1,4 +1,4 @@
-package network.talker.app.dev.webrtc
+package network.talker.app.dev
 
 import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
@@ -25,10 +25,6 @@ import com.amazonaws.services.kinesisvideo.model.ResourceEndpointListItem
 import com.amazonaws.services.kinesisvideosignaling.model.IceServer
 import com.amazonaws.services.kinesisvideowebrtcstorage.AWSKinesisVideoWebRTCStorageClient
 import com.amazonaws.services.kinesisvideowebrtcstorage.model.JoinStorageSessionRequest
-import network.talker.app.dev.KinesisTalkerApp
-import network.talker.app.dev.LOG_TAG
-import network.talker.app.dev.TalkerGlobalVariables
-import network.talker.app.dev.TalkerSDKApplication
 import network.talker.app.dev.model.Event
 import network.talker.app.dev.model.Message
 import network.talker.app.dev.networking.calls.sdkCreateUser
@@ -44,6 +40,17 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import network.talker.app.dev.webrtc.AudioStatus
+import network.talker.app.dev.webrtc.CreateLocalPeerConnection
+import network.talker.app.dev.webrtc.EventListener
+import network.talker.app.dev.webrtc.KinesisVideoSdpObserver
+import network.talker.app.dev.webrtc.PeerConnectionState
+import network.talker.app.dev.webrtc.RegistrationState
+import network.talker.app.dev.webrtc.UpdateSignalingChannelInfoTask
+import network.talker.app.dev.webrtc.checkAndAddIceCandidate
+import network.talker.app.dev.webrtc.createSdpAnswer
+import network.talker.app.dev.webrtc.createSdpOffer
+import network.talker.app.dev.webrtc.handlePendingIceCandidates
 import org.webrtc.AudioTrack
 import org.webrtc.DataChannel
 import org.webrtc.IceCandidate
@@ -181,7 +188,7 @@ object Talker {
                 )
             }
         }, fcmToken = fcmToken,
-            sdkKey = this.sdkKey
+            sdkKey = sdkKey
         )
     }
 
@@ -1180,7 +1187,7 @@ object Talker {
                     onLoginFailure("Network not available")
                 }
             }, fcmToken = fcmToken,
-                sdkKey = this.sdkKey
+                sdkKey = sdkKey
             )
         }
     }

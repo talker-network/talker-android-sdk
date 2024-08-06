@@ -9,10 +9,8 @@ import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.gson.JsonParser
-import network.talker.app.dev.KinesisTalkerApp.getSystemService
-import network.talker.app.dev.KinesisTalkerApp.sendBroadcast
 import network.talker.app.dev.R
-import network.talker.app.dev.webrtc.Talker
+import network.talker.app.dev.Talker
 
 fun Talker.handleIntent(intent: Intent?, context: Context) {
     val CHANNEL_NAME = "General"
@@ -29,7 +27,7 @@ fun Talker.handleIntent(intent: Intent?, context: Context) {
             // Handle the received message
             val notificationTitle = "Audio message"
             val notificationBody = "Playing remote audio message..."
-            val notificationManager = getSystemService(NotificationManager::class.java)
+            val notificationManager = context.getSystemService(NotificationManager::class.java)
             val channel = NotificationChannel(
                 CHANNEL_ID, CHANNEL_NAME, IMPORTANCE
             )
@@ -55,7 +53,7 @@ fun Talker.handleIntent(intent: Intent?, context: Context) {
 
             try {
                 val url = JsonParser.parseString(intent.extras?.getString("data")).asJsonObject["media_link"].asString
-                sendBroadcast(
+                context.sendBroadcast(
                     Intent()
                         .setPackage(context.packageName)
                         .setAction("audio_player.sdk")

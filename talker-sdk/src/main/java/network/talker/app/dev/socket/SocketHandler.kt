@@ -9,7 +9,7 @@ import com.amazonaws.mobile.auth.core.internal.util.ThreadUtils.runOnUiThread
 import network.talker.app.dev.LOG_TAG
 import network.talker.app.dev.TalkerGlobalVariables
 import network.talker.app.dev.sharedPreference.SharedPreference
-import network.talker.app.dev.webrtc.Talker
+import network.talker.app.dev.Talker
 import com.google.gson.JsonParser
 import io.socket.client.Ack
 import io.socket.client.IO

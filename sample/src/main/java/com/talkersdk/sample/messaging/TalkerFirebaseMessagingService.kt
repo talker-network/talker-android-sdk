@@ -5,7 +5,7 @@ import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import network.talker.app.dev.messaging.handleIntent
-import network.talker.app.dev.webrtc.Talker
+import network.talker.app.dev.Talker
 
 // add this messaging service to your androidManifest.xml file.
 // this service will be responsible for getting notifications from the server.

@@ -35,7 +35,7 @@ import network.talker.app.dev.webrtc.AudioStatus
 import network.talker.app.dev.webrtc.EventListener
 import network.talker.app.dev.webrtc.PeerConnectionState
 import network.talker.app.dev.webrtc.RegistrationState
-import network.talker.app.dev.webrtc.Talker
+import network.talker.app.dev.Talker
 
 @Composable
 fun SingleButtonSample(fcmToken: String) {
