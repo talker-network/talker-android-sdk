@@ -6,10 +6,10 @@ enum class PeerConnectionState {
     Closed
 }
 
-enum class RegistrationState {
-    Success,
-    Failure
-}
+//enum class RegistrationState {
+//    Success,
+//    Failure
+//}
 
 enum class AudioStatus {
     Connecting,
@@ -18,8 +18,8 @@ enum class AudioStatus {
     Stopped
 }
 
-interface EventListener {
-    fun onRegistrationStateChange(registrationState: RegistrationState, message: String)
-    fun onPeerConnectionStateChange(peerConnectionState: PeerConnectionState, message : String)
-    fun onAudioStatusChange(audioStatus: AudioStatus)
-}
+//interface EventListener {
+////    fun onRegistrationStateChange(registrationState: RegistrationState, message: String)
+//    fun onPeerConnectionStateChange(peerConnectionState: PeerConnectionState, message : String)
+//    fun onAudioStatusChange(audioStatus: AudioStatus)
+//}

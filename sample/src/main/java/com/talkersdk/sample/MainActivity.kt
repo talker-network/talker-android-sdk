@@ -78,7 +78,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         Talker.closeConnection()
+        super.onDestroy()
     }
 }

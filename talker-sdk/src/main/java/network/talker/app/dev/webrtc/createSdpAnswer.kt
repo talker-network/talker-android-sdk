@@ -12,7 +12,6 @@ import java.util.Queue
 
 internal fun createSdpAnswer(
     localPeer: PeerConnection?,
-    master: Boolean = true,
     recipientClientId: String,
     client: SignalingServiceWebSocketClient?,
     peerConnectionFoundMap: HashMap<String, PeerConnection>,
@@ -43,7 +42,7 @@ internal fun createSdpAnswer(
 
                 // creating answer message data which will be sending to the client server.
                 val answer = Message.createAnswerMessage(
-                    sessionDescription, master, recipientClientId
+                    sessionDescription, recipientClientId
                 )
 
                 //sending sdp answer

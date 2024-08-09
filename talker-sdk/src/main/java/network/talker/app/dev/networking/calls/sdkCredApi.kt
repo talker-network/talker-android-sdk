@@ -19,7 +19,7 @@ internal fun sdkCredAPI(
     onInternetNotAvailable : () -> Unit = {},
 ){
     if (AppUtils.isNetworkAvailable(context)){
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+        CoroutineScope(Dispatchers.IO).launch {
             try {
                 val response = RetrofitClient.retrofitApiService.SdkCredAPI(
                     sdkKey
@@ -27,9 +27,9 @@ internal fun sdkCredAPI(
                 if (response.isSuccessful && response.body() != null && response.code() == 200){
                     val data = response.body()
                     if (data != null) {
-                        withContext(Dispatchers.Main){
+//                        withContext(Dispatchers.IO){
                             onSuccess(data)
-                        }
+//                        }
                     }
                 }else{
                     withContext(Dispatchers.Main){

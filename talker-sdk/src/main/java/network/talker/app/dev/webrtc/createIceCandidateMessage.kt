@@ -14,7 +14,6 @@ internal data class MessagePayload(
 
 internal fun createIceCandidateMessage(
     iceCandidate: IceCandidate,
-    master: Boolean = true,
     mClientId: String?,
     recipientClientId: String,
 ): Message {
@@ -32,7 +31,7 @@ internal fun createIceCandidateMessage(
         LOG_TAG, "message_payload : $messagePayload"
     )
 
-    val senderClientId = if ((master)) "" else mClientId!!
+    val senderClientId = mClientId!!
 
     return Message(
         "ICE_CANDIDATE", recipientClientId, senderClientId, String(

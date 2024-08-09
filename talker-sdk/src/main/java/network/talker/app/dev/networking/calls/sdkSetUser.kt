@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import network.talker.app.dev.sharedPreference.SharedPreference
 
 internal fun sdkSetUser(
     context : Context,
@@ -22,12 +23,13 @@ internal fun sdkSetUser(
     fcmToken : String = "testing"
 ){
     if (AppUtils.isNetworkAvailable(context)){
+        val sharedPreference = SharedPreference(context)
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
                 val response = RetrofitClient.retrofitApiService.SdkSetUserAPI(
                     token = sdkKey,
                     body = SetUserModelRequest(
-                        prev_user_id = userId,
+                        prev_user_id = sharedPreference.getUserData().user_id.ifEmpty { userId },
                         fcm_token = fcmToken,
                         user_id = userId
                     )

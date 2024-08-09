@@ -14,17 +14,21 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Base64
 import android.util.Log
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.Worker
+import androidx.work.WorkerParameters
 import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.mobile.auth.core.internal.util.ThreadUtils.runOnUiThread
 import com.amazonaws.mobile.client.Callback
-import com.amazonaws.mobile.client.SignOutOptions
 import com.amazonaws.mobile.client.results.SignInResult
-import com.amazonaws.regions.Region
 import com.amazonaws.services.kinesisvideo.model.ChannelRole
 import com.amazonaws.services.kinesisvideo.model.ResourceEndpointListItem
 import com.amazonaws.services.kinesisvideosignaling.model.IceServer
-import com.amazonaws.services.kinesisvideowebrtcstorage.AWSKinesisVideoWebRTCStorageClient
-import com.amazonaws.services.kinesisvideowebrtcstorage.model.JoinStorageSessionRequest
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import network.talker.app.dev.model.Event
 import network.talker.app.dev.model.Message
 import network.talker.app.dev.networking.calls.sdkCreateUser
@@ -36,16 +40,11 @@ import network.talker.app.dev.sharedPreference.SharedPreference
 import network.talker.app.dev.socket.SocketHandler
 import network.talker.app.dev.utils.Constants
 import network.talker.app.dev.utils.getSignedUri
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import network.talker.app.dev.webrtc.AudioStatus
 import network.talker.app.dev.webrtc.CreateLocalPeerConnection
-import network.talker.app.dev.webrtc.EventListener
+import network.talker.app.dev.webrtc.Kinesis
 import network.talker.app.dev.webrtc.KinesisVideoSdpObserver
 import network.talker.app.dev.webrtc.PeerConnectionState
-import network.talker.app.dev.webrtc.RegistrationState
 import network.talker.app.dev.webrtc.UpdateSignalingChannelInfoTask
 import network.talker.app.dev.webrtc.checkAndAddIceCandidate
 import network.talker.app.dev.webrtc.createSdpAnswer
@@ -98,7 +97,6 @@ object Talker {
     private var applicationContext: Context? = null
     private var mRegion: String = ""
     private var mClientId: String? = null
-    private var isMaster: Boolean = true
     private var audioManager: AudioManager? = null
     private var mChannelId: String = ""
     private var mChannelName: String = ""
@@ -115,15 +113,25 @@ object Talker {
     private lateinit var buffer: ByteArray
     private const val SDK_KEY_ERROR = "Kindly initialize Talker with SDK key or Api Key"
     private var hasStartedTalking = false
+    private var retryCount = 0
+    private var hasToRetry = false
+    private var isFirstTime = true
+    class EventListeners {
+        var onPeerConnectionStateChange : ((peerConnectionState: PeerConnectionState, message : String) -> Unit)? = null
+        var onAudioStatusChange : ((audioStatus: AudioStatus) -> Unit)? = null
+    }
+
+    val eventListener : EventListeners = EventListeners()
+
     private fun validateSDKKey() {
         if (sdkKey.isEmpty()) {
             throw Exception(SDK_KEY_ERROR)
         }
     }
 
-    fun isUserLoggedIn(): Boolean {
+    internal fun isUserLoggedIn(): Boolean {
         validateSDKKey()
-        return KinesisTalkerApp.auth.isSignedIn
+        return Kinesis.auth.isSignedIn
     }
 
     fun init(sdkKey: String) {
@@ -134,9 +142,18 @@ object Talker {
         context: Context,
         name: String,
         fcmToken: String,
-        eventListener: EventListener
+//        eventListener: EventListener,
+        onSuccess: (message: String) -> Unit = {},
+        onFailure: (message: String) -> Unit = {},
+        channelName: String = "",
+        region: String = "",
     ) {
         validateSDKKey()
+
+        hasStartedTalking = false
+        retryCount = 0
+        hasToRetry = false
+        isFirstTime = true
         val sharedPreference = SharedPreference(context)
         sdkCreateUser(context, name = name, onSuccess = { res ->
             sharedPreference.setUserData(res.data)
@@ -151,63 +168,163 @@ object Talker {
                 object : Callback<SignInResult> {
                     override fun onResult(result: SignInResult?) {
                         getMainLooper {
-                            eventListener.onRegistrationStateChange(
-                                RegistrationState.Success,
-                                "User register success"
-                            )
+//                            eventListener.onRegistrationStateChange(
+//                                RegistrationState.Success,
+//                                "User register success"
+//                            )
+                            onSuccess("User register success")
                         }
                         establishConnection(
                             context,
-                            false,
-                            eventListener
+                            channelName,
+                            region,
+//                            eventListener
                         )
                     }
 
                     override fun onError(e: java.lang.Exception?) {
                         getMainLooper {
-                            eventListener.onRegistrationStateChange(
-                                RegistrationState.Failure,
-                                "User register failed. Error : ${e?.message}"
-                            )
+//                            eventListener.onRegistrationStateChange(
+//                                RegistrationState.Failure,
+//                                "User register failed. Error : ${e?.message}"
+//                            )
+                            onFailure("User register failed. Error : ${e?.message}")
                             e?.printStackTrace()
                         }
                     }
                 })
         }, onError = { errorData ->
             getMainLooper {
-                eventListener.onRegistrationStateChange(
-                    RegistrationState.Failure,
-                    errorData.message
-                )
+//                eventListener.onRegistrationStateChange(
+//                    RegistrationState.Failure,
+//                    errorData.message
+//                )
+                onFailure(errorData.message)
             }
         }, onInternetNotAvailable = {
             getMainLooper {
-                eventListener.onRegistrationStateChange(
-                    RegistrationState.Failure,
-                    "Network not available"
-                )
+//                eventListener.onRegistrationStateChange(
+//                    RegistrationState.Failure,
+//                    "Network not available"
+//                )
+                onFailure("Network not available")
             }
         }, fcmToken = fcmToken,
             sdkKey = sdkKey
         )
     }
 
+    fun sdkSetUser(
+        context: Context,
+        userName: String,
+        fcmToken: String,
+//        eventListener: EventListener,
+        onSuccess: (message: String) -> Unit = {},
+        onFailure: (message: String) -> Unit = {},
+        channelName: String = "",
+        region: String = "",
+    ) {
+        validateSDKKey()
+        if (userName.isEmpty()) {
+//            eventListener.onRegistrationStateChange(
+//                RegistrationState.Failure,
+//                "Username cannot be empty"
+//            )
+            onFailure("Username cannot be empty")
+            return
+        }
+        sdkSetUser(
+            context,
+            this.sdkKey,
+            userName,
+            onSuccess = { res ->
+                TalkerSDKApplication().auth.signIn(res.data.a_username,
+                    res.data.a_pass,
+                    emptyMap(),
+                    mapOf(
+                        "name" to res.data.name,
+                        "user_id" to res.data.user_id,
+                        "user_auth_token" to res.data.user_auth_token
+                    ),
+                    object : Callback<SignInResult> {
+                        override fun onResult(result: SignInResult?) {
+                            getMainLooper {
+//                                eventListener.onRegistrationStateChange(
+//                                    RegistrationState.Success,
+//                                    "User register success"
+//                                )
+                                onSuccess("User login success")
+                            }
+                            establishConnection(
+                                context,
+                                channelName,
+                                region,
+//                                eventListener
+                            )
+                        }
+
+                        override fun onError(e: java.lang.Exception?) {
+                            getMainLooper {
+//                                eventListener.onRegistrationStateChange(
+//                                    RegistrationState.Failure,
+//                                    "User register failed. Error : ${e?.message}"
+//                                )
+                                onFailure("User register failed. Error : ${e?.message}")
+                                e?.printStackTrace()
+                                return@getMainLooper
+                            }
+                        }
+                    })
+            },
+            onError = { errorData ->
+                getMainLooper {
+//                    eventListener.onRegistrationStateChange(
+//                        RegistrationState.Failure,
+//                        errorData.message
+//                    )
+                    onFailure(errorData.message)
+                    return@getMainLooper
+                }
+            }, onInternetNotAvailable = {
+                getMainLooper {
+//                    eventListener.onRegistrationStateChange(
+//                        RegistrationState.Failure,
+//                        "Network not available"
+//                    )
+                    onFailure("Network not available")
+                    return@getMainLooper
+                }
+            }, fcmToken = fcmToken
+        )
+    }
+
     fun startPttAudio(isChannelAvailable: (Boolean) -> Unit) {
         validateSDKKey()
-        sendBroadCast(
-            "CONNECTING",
-            "Getting info about channel availability"
-        )
-        if (!hasStartedTalking) {
-            toggleLocalAudioTrack(false, isChannelAvailable = {
-                if (it) {
-                    hasStartedTalking = true
-                    sendBroadCast("SENDING", "The channel is occupied")
-                } else {
-                    sendBroadCast("BUSY", "Sending audio")
-                }
-                isChannelAvailable(it)
-            })
+        if (hasToRetry){
+            hasToRetry = false
+            applicationContext?.let {
+                establishConnection(
+                    it,
+                    mChannelName,
+                    mRegion
+                )
+            }
+        }else{
+            sendBroadCast(
+                "CONNECTING",
+                "Getting info about channel availability"
+            )
+            if (!hasStartedTalking) {
+                startEndAudioSending(false, isChannelAvailable = {
+                    if (it) {
+                        hasStartedTalking = true
+                        sendBroadCast("SENDING", "The channel is occupied")
+                    } else {
+                        sendBroadCast("BUSY", "Sending audio")
+                    }
+                    isChannelAvailable(it)
+                })
+            }
         }
     }
 
@@ -215,90 +332,106 @@ object Talker {
         validateSDKKey()
         if (hasStartedTalking) {
             hasStartedTalking = false
-            toggleLocalAudioTrack(true)
+            startEndAudioSending(true)
             sendBroadCast("STOPPED", "Stopped sending audio")
         }
     }
 
     // close everything....
     fun closeConnection() {
-        hasStartedTalking = false
-        validateSDKKey()
-        SocketHandler.broadCastStop(mChannelId)
-        SocketHandler.closeConnection()
-        audioManager?.mode = originalAudioMode
-        audioManager?.isSpeakerphoneOn = originalSpeakerphoneOn
-        pendingIceCandidatesMap.clear()
-        peerConnectionFoundMap.clear()
-        peerConnectionFoundMap.clear()
-        pendingIceCandidatesMap.clear()
-        createLocalPeerConnection?.closeAll()
-        try {
-            runOnUiThread {
-                synchronized(this) {
-                    localPeer?.let {
-                        it.close()
-                        it.dispose()
-                        localPeer = null
+        runOnUiThread {
+            synchronized(this) {
+                hasStartedTalking = false
+                validateSDKKey()
+                class MyWorker(context: Context, workerParameters: WorkerParameters) :
+                    Worker(context, workerParameters) {
+                    override fun doWork(): Result {
+                        SocketHandler.broadCastStop(mChannelId)
+                        SocketHandler.closeConnection()
+                        audioManager?.mode = originalAudioMode
+                        audioManager?.isSpeakerphoneOn = originalSpeakerphoneOn
+                        pendingIceCandidatesMap.clear()
+                        peerConnectionFoundMap.clear()
+                        peerConnectionFoundMap.clear()
+                        pendingIceCandidatesMap.clear()
+                        createLocalPeerConnection?.closeAll()
+                        localPeer?.let {
+                            it.close()
+                            it.dispose()
+                            localPeer = null
+                        }
+                        client?.disconnect()
+                        client = null
+                        CoroutineScope(Dispatchers.Main).launch {
+                            sendBroadCast(
+                                "CONNECTION_CLOSED",
+                                "Connection closed"
+                            )
+                        }
+//                        logoutUser(
+//                            onLogoutSuccess = {
+//                                val sharedPreference = SharedPreference(applicationContext)
+//                                sharedPreference.clearPreference()
+//                                CoroutineScope(Dispatchers.Main).launch {
+//                                    sendBroadCast(
+//                                        "CONNECTION_CLOSED",
+//                                        "Connection closed"
+//                                    )
+//                                }
+//                            }
+//                        )
+                        return Result.success()
                     }
                 }
-            }
-        } catch (e: Exception) {
-            if (TalkerGlobalVariables.printLogs) {
-                Log.e(LOG_TAG, "Error while closing and disposing localPeer", e)
+                try {
+                    val workRequestBuilder = OneTimeWorkRequestBuilder<MyWorker>()
+                        .build()
+                    applicationContext?.let {
+                        WorkManager.getInstance(it).enqueue(workRequestBuilder)
+                    }
+                } catch (e: Exception) {
+                    if (TalkerGlobalVariables.printLogs) {
+                        Log.e(LOG_TAG, "Error while closing and disposing localPeer", e)
+                    }
+                }
+
             }
         }
-        client?.disconnect()
-        client = null
-        logoutUser(
-            onLogoutSuccess = {
-                CoroutineScope(Dispatchers.Main).launch {
-                    sendBroadCast(
-                        "CONNECTION_CLOSED",
-                        "Connection closed"
-                    )
-                }
-            }
-        )
-
     }
 
-    private fun logoutUser(
-        onLogoutSuccess: (message: String) -> Unit = {}
-    ) {
-        validateSDKKey()
-        KinesisTalkerApp.auth.signOut(
-            SignOutOptions.Builder()
-                .signOutGlobally(true)
-                .build(),
-            object : Callback<Void?> {
-                override fun onResult(result: Void?) {
-                    getMainLooper {
-                        onLogoutSuccess("Sign out successful")
-                    }
-                }
-
-                override fun onError(e: java.lang.Exception?) {
-                    getMainLooper {
-                        onLogoutSuccess("Sign out successful")
-                    }
-                    e?.printStackTrace()
-                }
-
-            }
-        )
-    }
+//    private fun logoutUser(
+//        onLogoutSuccess: (message: String) -> Unit = {}
+//    ) {
+//        KinesisTalkerApp.auth.signOut(
+//            SignOutOptions.Builder()
+//                .signOutGlobally(true)
+//                .build(),
+//            object : Callback<Void?> {
+//                override fun onResult(result: Void?) {
+//                    getMainLooper {
+//                        onLogoutSuccess("Sign out successful")
+//                    }
+//                }
+//
+//                override fun onError(e: java.lang.Exception?) {
+//                    getMainLooper {
+//                        onLogoutSuccess("Sign out successful")
+//                    }
+//                    e?.printStackTrace()
+//                }
+//            }
+//        )
+//    }
 
     private fun establishConnection(
         applicationContext: Context,
-        isMaster: Boolean,
-        eventListener: EventListener
+        channelName: String,
+        region: String,
     ) {
         CoroutineScope(
-            Dispatchers.IO + SupervisorJob()
+            Dispatchers.IO
         ).launch {
             Talker.applicationContext = applicationContext
-            Talker.isMaster = isMaster
             mCreds = TalkerSDKApplication().auth.credentials
             audioManager = applicationContext.getSystemService(AudioManager::class.java)
             val sharedPreference = SharedPreference(applicationContext)
@@ -307,7 +440,7 @@ object Talker {
                 .getOrNull(2) ?: ""
             if (!isUserLoggedIn()) {
                 getMainLooper {
-                    eventListener.onPeerConnectionStateChange(
+                    eventListener.onPeerConnectionStateChange?.invoke(
                         PeerConnectionState.Failure,
                         "User not logged in"
                     )
@@ -320,78 +453,143 @@ object Talker {
                     "Peer connecting..."
                 )
             }
-            broadcastReceiver = object : BroadcastReceiver() {
-                override fun onReceive(context: Context?, intent: Intent?) {
-                    val action = intent?.extras?.getString("action")
-                    val message = intent?.extras?.getString("message")
-                    when (action) {
-                        "CONNECTION_SUCCESSFUL" -> {
-                            getMainLooper {
-                                SocketHandler.setSocket(sharedPreference.getUserData().user_auth_token)
-                                SocketHandler.establishConnection(applicationContext)
-                                eventListener.onPeerConnectionStateChange(
-                                    PeerConnectionState.Success,
-                                    "Peer connected successfully"
-                                )
+            if (retryCount == 0){
+                broadcastReceiver = object : BroadcastReceiver() {
+                    override fun onReceive(context: Context?, intent: Intent?) {
+                        val action = intent?.extras?.getString("action")
+                        val message = intent?.extras?.getString("message")
+                        val failureFrom = intent?.extras?.getString("failure_from")
+                        when (action) {
+                            "CONNECTION_SUCCESSFUL" -> {
+                                getMainLooper {
+                                    isFirstTime = false
+                                    hasToRetry = false
+                                    retryCount = 0
+                                    SocketHandler.setSocket(sharedPreference.getUserData().user_auth_token, applicationContext)
+                                    SocketHandler.establishConnection(applicationContext)
+                                    eventListener.onPeerConnectionStateChange?.invoke(
+                                        PeerConnectionState.Success,
+                                        "Peer connected successfully"
+                                    )
+                                }
                             }
-                        }
 
-                        "CONNECTION_FAILURE" -> {
-                            getMainLooper {
-                                eventListener.onPeerConnectionStateChange(
-                                    PeerConnectionState.Failure,
-                                    message ?: "Error"
-                                )
-                                hasStartedTalking = false
-                                closeConnection()
-                                applicationContext.unregisterReceiver(broadcastReceiver)
+                            "CONNECTION_FAILURE" -> {
+                                getMainLooper {
+                                    // if the user is not connecting for the first time and
+                                    // also if retrying for less than 2nd time
+                                    // then we need to retry
+                                    if (isFirstTime){
+                                        // else if we are coming for the first time and we get some error than we inform the user as failure
+                                        isFirstTime = false
+                                        hasToRetry = false
+                                        retryCount = 0
+                                        eventListener.onPeerConnectionStateChange?.invoke(
+                                            PeerConnectionState.Failure,
+                                            message ?: "Error"
+                                        )
+                                        hasStartedTalking = false
+                                        closeConnection()
+                                        applicationContext.unregisterReceiver(broadcastReceiver)
+                                    }else{
+                                        if (this@Talker.retryCount < 2){
+                                            sendBroadCast(
+                                                "CONNECTING"
+                                            )
+                                            this@Talker.retryCount++
+                                            if (TalkerGlobalVariables.printLogs){
+                                                Log.d(
+                                                    LOG_TAG,
+                                                    "CONNECTION_FAILURE : $failureFrom"
+                                                )
+                                            }
+                                            if (failureFrom == "WEBRTC"){
+                                                establishConnection(
+                                                    applicationContext,
+                                                    channelName,
+                                                    region
+                                                )
+                                            }
+                                            if (failureFrom == "SOCKET"){
+                                                SocketHandler.setSocket(sharedPreference.getUserData().user_auth_token, applicationContext)
+                                                SocketHandler.establishConnection(applicationContext)
+                                            }
+                                        }else{
+                                            hasToRetry = true
+                                        }
+                                    }
+                                }
                             }
-                        }
 
-                        "CONNECTION_CLOSED" -> {
-                            getMainLooper {
-                                eventListener.onPeerConnectionStateChange(
-                                    PeerConnectionState.Closed,
-                                    "Peer connection closed"
-                                )
-                                hasStartedTalking = false
-                                applicationContext.unregisterReceiver(broadcastReceiver)
+                            "CONNECTION_CLOSED" -> {
+                                getMainLooper {
+                                    try {
+                                        isFirstTime = false
+                                        hasToRetry = false
+                                        retryCount = 0
+                                        eventListener.onPeerConnectionStateChange?.invoke(
+                                            PeerConnectionState.Closed,
+                                            "Peer connection closed"
+                                        )
+                                        hasStartedTalking = false
+                                        applicationContext.unregisterReceiver(broadcastReceiver)
+                                    } catch (e: Exception){
+                                        e.printStackTrace()
+                                    }
+                                }
                             }
-                        }
 
-                        "CONNECTING" -> {
-                            getMainLooper {
-                                eventListener.onAudioStatusChange(AudioStatus.Connecting)
+                            "CONNECTING" -> {
+                                getMainLooper {
+                                    eventListener.onAudioStatusChange?.invoke(
+                                        AudioStatus.Connecting
+                                    )
+                                }
                             }
-                        }
 
-                        "BUSY" -> {
-                            getMainLooper {
-                                eventListener.onAudioStatusChange(AudioStatus.Busy)
+                            "BUSY" -> {
+                                getMainLooper {
+                                    eventListener.onAudioStatusChange?.invoke(
+                                        AudioStatus.Busy
+                                    )
+                                }
                             }
-                        }
 
-                        "SENDING" -> {
-                            getMainLooper {
-                                eventListener.onAudioStatusChange(AudioStatus.Sending)
+                            "SENDING" -> {
+                                getMainLooper {
+                                    eventListener.onAudioStatusChange?.invoke(
+                                        AudioStatus.Sending
+                                    )
+                                }
                             }
-                        }
 
-                        "STOPPED" -> {
-                            getMainLooper {
-                                eventListener.onAudioStatusChange(AudioStatus.Stopped)
+                            "STOPPED" -> {
+                                getMainLooper {
+                                    eventListener.onAudioStatusChange?.invoke(
+                                        AudioStatus.Stopped
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            applicationContext.registerReceiver(
-                broadcastReceiver,
-                IntentFilter(
-                    "com.talker.sdk"
-                ), Context.RECEIVER_EXPORTED
-            )
+                try {
+                    applicationContext.unregisterReceiver(broadcastReceiver)
+                }catch (e : Exception){
+                    e.printStackTrace()
+                }
+
+                applicationContext.registerReceiver(
+                    broadcastReceiver,
+                    IntentFilter(
+                        "com.talker.sdk"
+                    ), Context.RECEIVER_EXPORTED
+                )
+            }else{
+                SocketHandler.setSocket(sharedPreference.getUserData().user_auth_token, applicationContext)
+                SocketHandler.establishConnection(applicationContext)
+            }
             sdkCredAPI(
                 applicationContext, onSuccess = { res ->
                     mRegion =
@@ -401,7 +599,7 @@ object Talker {
                     if (updateSignalingChannelInfo(
                             mRegion,
                             mChannelName,
-                            if (isMaster) ChannelRole.MASTER else ChannelRole.VIEWER
+                            ChannelRole.VIEWER
                         )
                     ) {
                         //if the mIceServerList is not empty then the following code will be executed
@@ -485,14 +683,12 @@ object Talker {
                         // that the server can distinguish when multiple viewers are joining. All this viewers will be identified on the basis of their respective client ids.
                         // the client id will be the last part of their user_auth_token.
                         // we will get the mChannelArn from the api. i.e. when we fetch info about the channel using its name.
-                        val masterEndpoint =
-                            (mWssEndpoint + "?" + Constants.CHANNEL_ARN_QUERY_PARAM) + "=" + mChannelArn
                         val viewerEndpoint =
                             ((mWssEndpoint + "?" + Constants.CHANNEL_ARN_QUERY_PARAM) + "=" + mChannelArn + "&" + Constants.CLIENT_ID_QUERY_PARAM) + "=" + mClientId
                         if (TalkerGlobalVariables.printLogs) {
                             Log.d(
                                 LOG_TAG,
-                                "end point created : ${if (isMaster) masterEndpoint else viewerEndpoint}"
+                                "end point created : $viewerEndpoint"
                             )
                         }
 
@@ -500,7 +696,7 @@ object Talker {
                         // this function will generate the signed uri for the signaling service.
                         // this is done to basically authenticate the user to the signaling service.
                         val signedUri = getSignedUri(
-                            if (isMaster) masterEndpoint else viewerEndpoint,
+                            viewerEndpoint,
                             mCreds,
                             applicationContext,
                             mWssEndpoint,
@@ -509,40 +705,6 @@ object Talker {
 
                         //check if the signedUri is not null.
                         checkNotNull(signedUri)
-
-
-                        //if the user is joining as a master then local peer connection will be established first bcoz their will be no localpeerconnection established.
-                        // if we are joining as a viewer than we will assume that their is already an master who has created this and is waiting for viewers to joing.
-                        if (isMaster) {
-                            createLocalPeerConnection = CreateLocalPeerConnection(
-                                peerIceServers,
-                                peerConnectionFactory!!,
-                                onLocalPeer = {
-                                    localPeer = it
-                                },
-                                applicationContext,
-                                client,
-//                printStatsExecutor,
-                                CHANNEL_ID,
-                                mNotificationId = {
-                                    mNotificationId++
-                                },
-                                isMaster,
-                                mClientId,
-                                recipientClientId,
-                                onRemoteAudioTrack = {
-                                    remoteAudioTrack = it
-                                    remoteAudioTrack?.setEnabled(true)
-                                    audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
-                                    audioManager?.isSpeakerphoneOn = true
-                                },
-                                audioManager,
-                                mChannelName,
-                                onDataChannel = { dataChannel2: DataChannel? ->
-                                    dataChannel = dataChannel2
-                                }
-                            )
-                        }
 
                         val wsHost = signedUri.toString()
 
@@ -576,7 +738,6 @@ object Talker {
                                 // function to create sdp answer
                                 createSdpAnswer(
                                     localPeer,
-                                    isMaster,
                                     recipientClientId,
                                     client,
                                     peerConnectionFoundMap,
@@ -584,7 +745,7 @@ object Talker {
                                 )
 
                                 // notify the user that media has started recording to the stream
-                                if (isMaster && webrtcEndpoint != null) {
+                                if (webrtcEndpoint != null) {
                                     if (TalkerGlobalVariables.printLogs) {
                                         Log.i(
                                             LOG_TAG, "Media is being recorded to $mStreamArn"
@@ -684,7 +845,8 @@ object Talker {
                                 }
                                 sendBroadCast(
                                     "CONNECTION_FAILURE",
-                                    "Received error in signaling client : ${event}"
+                                    "Received error in signaling client : ${event}",
+                                    "WEBRTC"
                                 )
                             }
 
@@ -698,7 +860,8 @@ object Talker {
                                 }
                                 sendBroadCast(
                                     "CONNECTION_FAILURE",
-                                    "Signaling client returned exception: " + e.message
+                                    "Signaling client returned exception: " + e.message,
+                                    "WEBRTC"
                                 )
                             }
 
@@ -726,10 +889,11 @@ object Talker {
                                     "Client connection " + (if (client!!.isOpen) "Successful" else "Failed")
                                 )
                             }
-                            if (!client!!.isOpen) {
+                            if (client?.isOpen == false) {
                                 sendBroadCast(
                                     "CONNECTION_FAILURE",
-                                    "Client connection failed"
+                                    "Client connection failed",
+                                    "WEBRTC"
                                 )
                             }
                         } catch (e: java.lang.Exception) {
@@ -740,7 +904,8 @@ object Talker {
                             }
                             sendBroadCast(
                                 "CONNECTION_FAILURE",
-                                "Exception with websocket client: $e"
+                                "Exception with websocket client: $e",
+                                "WEBRTC"
                             )
                         }
 
@@ -751,87 +916,44 @@ object Talker {
                                     "Client connected to Signaling service " + client!!.isOpen
                                 )
                             }
-                            if (isMaster) {
-                                // If webrtc endpoint is non-null ==> Ingest media was checked
-                                // this code is used to establish the user's storage session.
-                                // this will be usefully only if the user wants to send messages to the other user.
-                                if (webrtcEndpoint != null) {
-                                    Thread {
-                                        try {
-                                            val storageClient: AWSKinesisVideoWebRTCStorageClient =
-                                                AWSKinesisVideoWebRTCStorageClient(
-                                                    KinesisTalkerApp.credentialsProvider.credentials
-                                                )
-                                            storageClient.setRegion(Region.getRegion(mRegion))
-                                            storageClient.signerRegionOverride = mRegion
-                                            storageClient.setServiceNameIntern("kinesisvideo")
-                                            storageClient.endpoint = webrtcEndpoint
-                                            storageClient.joinStorageSession(
-                                                JoinStorageSessionRequest().withChannelArn(
-                                                    mChannelArn
-                                                )
-                                            )
-                                            if (TalkerGlobalVariables.printLogs) {
-                                                Log.i(
-                                                    LOG_TAG, "Join storage session request sent!"
-                                                )
-                                            }
-                                        } catch (ex: java.lang.Exception) {
-                                            if (TalkerGlobalVariables.printLogs) {
-                                                Log.e(
-                                                    LOG_TAG,
-                                                    "Error sending join storage session request!",
-                                                    ex
-                                                )
-                                            }
-                                            sendBroadCast(
-                                                "CONNECTION_FAILURE",
-                                                "Error sending join storage session request! $ex"
-                                            )
-                                        }
-                                    }.start()
-                                }
-                            } else {
-                                if (TalkerGlobalVariables.printLogs) {
-                                    Log.d(
-                                        LOG_TAG, "Sending sdp offer as viewer to remote peer"
-                                    )
-                                }
-                                // we will have to send an sdp offer to the master so that we could join the master.
-                                // after sending this offer to master we will receive an answer from the master which we implemented earlier in this file inside
-                                // signaling listeners.
-                                createSdpOffer(
-                                    peerIceServers,
-                                    peerConnectionFactory!!,
-                                    onLocalPeer = {
-                                        localPeer = it
-                                    },
-                                    applicationContext,
-                                    client!!,
-                                    CHANNEL_ID,
-                                    mNotificationId = {
-                                        mNotificationId++
-                                    },
-                                    isMaster,
-                                    mClientId,
-                                    recipientClientId,
-                                    onRemoteAudioTrack = {
-                                        remoteAudioTrack = it
-                                        remoteAudioTrack?.setEnabled(true)
-                                        audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
-                                        audioManager?.isSpeakerphoneOn = true
-                                    },
-                                    audioManager,
-                                    onFinish = {
-                                        closeConnection()
-                                    },
-                                    localPeer,
-                                    mChannelName,
-                                    onDataChannel = { dataChannel2: DataChannel? ->
-                                        dataChannel = dataChannel2
-                                    }
+                            if (TalkerGlobalVariables.printLogs) {
+                                Log.d(
+                                    LOG_TAG, "Sending sdp offer as viewer to remote peer"
                                 )
                             }
+                            // we will have to send an sdp offer to the master so that we could join the master.
+                            // after sending this offer to master we will receive an answer from the master which we implemented earlier in this file inside
+                            // signaling listeners.
+                            createSdpOffer(
+                                peerIceServers,
+                                peerConnectionFactory!!,
+                                onLocalPeer = {
+                                    localPeer = it
+                                },
+                                applicationContext,
+                                client!!,
+                                CHANNEL_ID,
+                                mNotificationId = {
+                                    mNotificationId++
+                                },
+                                mClientId,
+                                recipientClientId,
+                                onRemoteAudioTrack = {
+                                    remoteAudioTrack = it
+                                    remoteAudioTrack?.setEnabled(true)
+                                    audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
+                                    audioManager?.isSpeakerphoneOn = true
+                                },
+                                audioManager,
+                                onFinish = {
+                                    closeConnection()
+                                },
+                                localPeer,
+                                mChannelName,
+                                onDataChannel = { dataChannel2: DataChannel? ->
+                                    dataChannel = dataChannel2
+                                }
+                            )
                         } else {
                             if (TalkerGlobalVariables.printLogs) {
                                 Log.e(
@@ -840,13 +962,15 @@ object Talker {
                             }
                             sendBroadCast(
                                 "CONNECTION_FAILURE",
-                                "Error in connecting to signaling service"
+                                "Error in connecting to signaling service",
+                                "WEBRTC"
                             )
                         }
                     } else {
                         sendBroadCast(
                             "CONNECTION_FAILURE",
-                            "Connection failed"
+                            "Connection failed",
+                            "WEBRTC"
                         )
                         return@sdkCredAPI
                     }
@@ -858,14 +982,16 @@ object Talker {
                     )
                     sendBroadCast(
                         "CONNECTION_FAILURE",
-                        error.message
+                        error.message,
+                        "WEBRTC"
                     )
                     return@sdkCredAPI
                 },
                 onInternetNotAvailable = {
                     sendBroadCast(
                         "CONNECTION_FAILURE",
-                        "Network not available"
+                        "Network not available",
+                        "WEBRTC"
                     )
                     return@sdkCredAPI
                 },
@@ -882,7 +1008,8 @@ object Talker {
 
     private fun sendBroadCast(
         action: String = "",
-        message: String = ""
+        message: String = "",
+        failureFrom : String? = null
     ) {
         applicationContext?.sendBroadcast(
             Intent()
@@ -891,6 +1018,11 @@ object Talker {
                 .apply {
                     putExtra("action", action)
                     putExtra("message", message)
+                    failureFrom?.let {
+                        putExtra(
+                            "failure_from", failureFrom
+                        )
+                    }
                 }
         )
     }
@@ -1063,18 +1195,19 @@ object Talker {
     // by doing that we specify that we are acquiring the rights speak and so no other person can speak.
     // this function sends the the permission to the backend and also handles the local audio source which responsible for sharing
     // your audio with other users.
-    private fun toggleLocalAudioTrack(
+    private fun startEndAudioSending(
         allowOthersToSpeak: Boolean,
         isChannelAvailable: (Boolean) -> Unit = {}
     ) {
         if (allowOthersToSpeak) {
+            // stop sharing audio
             SocketHandler.broadCastStop(mChannelId)
             localAudioTrack?.setEnabled(false)
             client?.sendPermission(
                 Message(
                     "PERMISSION_CHANGED",
                     recipientClientId,
-                    if (isMaster) "" else (mClientId ?: ""),
+                    (mClientId ?: ""),
                     String(
                         Base64.encode(
                             ("{\"type\":\"permission\",\"sdp\":\"true\"}").replace(
@@ -1087,6 +1220,7 @@ object Talker {
             endStream()
             stopRecording()
         } else {
+            // start sending audio
             // this function will return true inside ack if the channel is available.
             // i.e. no other person in the room is speaking right now.
             SocketHandler.broadCastStart(mChannelId, onAck = { args ->
@@ -1097,7 +1231,7 @@ object Talker {
                             Message(
                                 "PERMISSION_CHANGED",
                                 recipientClientId,
-                                if (isMaster) "" else (mClientId ?: ""),
+                                (mClientId ?: ""),
                                 String(
                                     Base64.encode(
                                         ("{\"type\":\"permission\",\"sdp\":\"false\"}").replace(
@@ -1126,7 +1260,7 @@ object Talker {
         }
     }
 
-    private fun getCurrentUserId(context: Context): String {
+    fun getCurrentUserId(context: Context): String {
         val sharedPreference = SharedPreference(context)
         return sharedPreference.getUserData().user_id
     }
@@ -1140,57 +1274,6 @@ object Talker {
         return isChannelAvailable
     }
 
-    private fun loginUser(
-        context: Context,
-        userName: String,
-        fcmToken: String,
-        onLoginSuccess: (message: String) -> Unit = {},
-        onLoginFailure: (errorMessage: String) -> Unit = {}
-    ) {
-        val sharedPreference = SharedPreference(context)
-        if (userName.isNotEmpty()) {
-            if (isUserLoggedIn()) {
-                getMainLooper {
-                    onLoginFailure("User is already logged in")
-                }
-                return
-            }
-            sdkSetUser(context, userId = userName, onSuccess = { res ->
-                sharedPreference.setUserData(res.data)
-                TalkerSDKApplication().auth?.signIn(res.data.a_username,
-                    res.data.a_pass,
-                    emptyMap(),
-                    mapOf(
-                        "name" to res.data.name,
-                        "user_id" to res.data.user_id,
-                        "user_auth_token" to res.data.user_auth_token
-                    ),
-                    object : Callback<SignInResult> {
-                        override fun onResult(result: SignInResult?) {
-                            getMainLooper {
-                                onLoginSuccess("Sign in successful")
-                            }
-                        }
-
-                        override fun onError(e: java.lang.Exception?) {
-                            getMainLooper {
-                                onLoginFailure("Sign in failed. Error : $e")
-                            }
-                        }
-                    })
-            }, onError = { errorData ->
-                getMainLooper {
-                    onLoginFailure(errorData.message)
-                }
-            }, onInternetNotAvailable = {
-                getMainLooper {
-                    onLoginFailure("Network not available")
-                }
-            }, fcmToken = fcmToken,
-                sdkKey = sdkKey
-            )
-        }
-    }
 
     private fun startStream() {
         val messageId = UUID.randomUUID()

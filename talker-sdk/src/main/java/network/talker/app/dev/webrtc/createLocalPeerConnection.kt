@@ -32,7 +32,6 @@ internal class CreateLocalPeerConnection(
     private val client: SignalingServiceWebSocketClient?,
     CHANNEL_ID: String,
     mNotificationId: () -> Int,
-    master: Boolean = true,
     mClientId: String?,
     recipientClientId: String,
     onRemoteAudioTrack: (AudioTrack?) -> Unit = {},
@@ -65,7 +64,6 @@ internal class CreateLocalPeerConnection(
                     // this code will exchange the ice candidates between both the peers.
                     val message: Message = createIceCandidateMessage(
                         iceCandidate,
-                        master,
                         mClientId,
                         recipientClientId
                     )
@@ -108,6 +106,7 @@ internal class CreateLocalPeerConnection(
                                     .apply {
                                         putExtra("action", "CONNECTION_FAILURE")
                                         putExtra("message", "Peer connection failed")
+                                        putExtra("failure_from", "WEBRTC")
                                     }
                             )
                             return@runOnUiThread

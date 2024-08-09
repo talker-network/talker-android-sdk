@@ -6,22 +6,22 @@ import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import com.amazonaws.mobile.auth.core.internal.util.ThreadUtils.runOnUiThread
-import network.talker.app.dev.LOG_TAG
-import network.talker.app.dev.TalkerGlobalVariables
-import network.talker.app.dev.sharedPreference.SharedPreference
-import network.talker.app.dev.Talker
 import com.google.gson.JsonParser
 import io.socket.client.Ack
 import io.socket.client.IO
 import io.socket.client.Manager
 import io.socket.client.Socket
+import network.talker.app.dev.LOG_TAG
+import network.talker.app.dev.Talker
+import network.talker.app.dev.TalkerGlobalVariables
+import network.talker.app.dev.sharedPreference.SharedPreference
 import org.json.JSONObject
 import java.net.URI
 import java.net.URISyntaxException
 
 internal object SocketHandler {
     private var socket: Socket? = null
-    fun setSocket(auth: String) {
+    fun setSocket(auth: String, context: Context) {
         try {
             val socketManager = Manager(
                 URI("https://test-api.talker.network/"),
@@ -31,7 +31,7 @@ internal object SocketHandler {
                             "Authorization" to listOf(auth)
                         )
                         forceNew = true
-                        reconnection = true
+                        reconnection = false
                         transports = arrayOf("websocket")
 
                     }
@@ -40,6 +40,18 @@ internal object SocketHandler {
                 "/sockets"
             )
         } catch (e: URISyntaxException) {
+            context.sendBroadcast(
+                Intent()
+                    .setPackage(context.packageName)
+                    .setAction("com.talker.sdk")
+                    .apply {
+                        putExtra("action", "CONNECTION_FAILURE")
+                        putExtra("message", e.localizedMessage)
+                        putExtra(
+                            "failure_from", "SOCKET"
+                        )
+                    }
+            )
             // Handle the exception more gracefully, e.g., log it or notify the user
             println("$LOG_TAG Error establishing connection: ${e.message}")
         }
@@ -63,6 +75,18 @@ internal object SocketHandler {
         socket?.on(
             Socket.EVENT_CONNECT_ERROR
         ) {
+            context.sendBroadcast(
+                Intent()
+                    .setPackage(context.packageName)
+                    .setAction("com.talker.sdk")
+                    .apply {
+                        putExtra("action", "CONNECTION_FAILURE")
+                        putExtra("message", "Websocket connection error")
+                        putExtra(
+                            "failure_from", "SOCKET"
+                        )
+                    }
+            )
             Log.d(LOG_TAG, "Socket EVENT_CONNECT_ERROR")
         }
         socket?.on(
@@ -72,12 +96,17 @@ internal object SocketHandler {
                 if (arg is String) {
                     runOnUiThread {
                         val url = JsonParser.parseString(arg).asJsonObject["media_link"].asString
+                        val channelId = JsonParser.parseString(arg).asJsonObject["channel_id"].asString
                         val senderId =
                             JsonParser.parseString(arg).asJsonObject["sender_id"].asString
                         if (TalkerGlobalVariables.printLogs) {
                             Log.d(
                                 LOG_TAG,
                                 "media_link : $url"
+                            )
+                            Log.d(
+                                LOG_TAG,
+                                "channel_id : $channelId"
                             )
                         }
                         Log.d(
@@ -97,6 +126,7 @@ internal object SocketHandler {
                                     .setAction("audio_player.sdk")
                                     .apply {
                                         putExtra("media_link", url)
+                                        putExtra("channel_id", channelId)
                                     }
                             )
                         }
@@ -134,38 +164,50 @@ internal object SocketHandler {
 
     fun closeConnection() {
         if (!Talker.isUserLoggedIn()) {
-            throw Exception("Kindly initialize Talker with SDK key or Api Key")
+            System.err.println(
+                "Kindly initialize Talker with SDK key or Api Key"
+            )
+        }else{
+//            if (socket?.connected() == true || socket?.isActive == true) {
+                socket?.disconnect()
+                socket?.off()
+                socket?.close()
+//            }
         }
-        if (socket?.connected() == true || socket?.isActive == true) {
-            socket?.disconnect()
-            socket?.off()
-            socket?.close()
-        }
+
     }
 
     fun broadCastStart(channelID: String, onAck: (Array<Any>) -> Unit) {
         if (!Talker.isUserLoggedIn()) {
-            throw Exception("Kindly initialize Talker with SDK key or Api Key")
-        }
-        val payload = JSONObject().apply {
-            put("channel_id", channelID)
-        }
-        if (socket?.connected() == true || socket?.isActive == true) {
-            socket?.emit("broadcast_start", payload, Ack { args ->
-                onAck(args)
-            })
+            System.err.println(
+                "Kindly initialize Talker with SDK key or Api Key"
+            )
+        }else{
+            val payload = JSONObject().apply {
+                put("channel_id", channelID)
+            }
+            if (socket?.connected() == true || socket?.isActive == true) {
+                socket?.emit("broadcast_start", payload, Ack { args ->
+                    onAck(args)
+                })
+            }else{
+                System.err.println(
+                    "Socket connect : ${socket?.connected()} isActive : ${socket?.isActive}"
+                )
+            }
         }
     }
 
     fun broadCastStop(channelID: String) {
         if (!Talker.isUserLoggedIn()) {
-            throw Exception("Kindly initialize Talker with SDK key or Api Key")
-        }
-        val payload = JSONObject().apply {
-            put("channel_id", channelID)
-        }
-        if (socket?.connected() == true || socket?.isActive == true) {
-            socket?.emit("broadcast_end", payload)
+            System.err.println("Kindly initialize Talker with SDK key or Api Key")
+        }else{
+            val payload = JSONObject().apply {
+                put("channel_id", channelID)
+            }
+            if (socket?.connected() == true || socket?.isActive == true) {
+                socket?.emit("broadcast_end", payload)
+            }
         }
     }
 }

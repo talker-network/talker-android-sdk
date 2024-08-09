@@ -31,11 +31,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import network.talker.app.dev.webrtc.AudioStatus
-import network.talker.app.dev.webrtc.EventListener
-import network.talker.app.dev.webrtc.PeerConnectionState
-import network.talker.app.dev.webrtc.RegistrationState
 import network.talker.app.dev.Talker
+import network.talker.app.dev.webrtc.AudioStatus
+import network.talker.app.dev.webrtc.PeerConnectionState
 
 @Composable
 fun SingleButtonSample(fcmToken: String) {
@@ -52,38 +50,57 @@ fun SingleButtonSample(fcmToken: String) {
 
     // event listener which will listen to changes like registration changes,
     // peer connectionChanges and AudioStatus changes.
-    val eventListener = object : EventListener {
-        override fun onRegistrationStateChange(
-            registrationState: RegistrationState,
-            message: String
-        ) {
-            Toast.makeText(context, registrationState.name, Toast.LENGTH_SHORT).show()
-            Log.d(
-                "alkdlskd",
-                "registrationState : ${registrationState.name} message : $message"
-            )
-        }
+//    val eventListener = object : EventListener {
+//        override fun onRegistrationStateChange(
+//            registrationState: RegistrationState,
+//            message: String
+//        ) {
+//            Toast.makeText(context, registrationState.name, Toast.LENGTH_SHORT).show()
+//            Log.d(
+//                "alkdlskd",
+//                "registrationState : ${registrationState.name} message : $message"
+//            )
+//        }
 
-        override fun onPeerConnectionStateChange(
-            peerConnectionState: PeerConnectionState,
-            message: String
-        ) {
-            isLoading = false
-            Toast.makeText(context, peerConnectionState.name, Toast.LENGTH_SHORT).show()
-            Log.d(
-                "alkdlskd",
-                "peerConnectionState : ${peerConnectionState.name}"
-            )
-            showPushToTalkButton = peerConnectionState == PeerConnectionState.Success
-        }
+//        override fun onPeerConnectionStateChange(
+//            peerConnectionState: PeerConnectionState,
+//            message: String
+//        ) {
+//            isLoading = false
+//            Toast.makeText(context, peerConnectionState.name, Toast.LENGTH_SHORT).show()
+//            Log.d(
+//                "Talker SDK",
+//                "peerConnectionState : ${peerConnectionState.name} ${Talker.getCurrentUserId(context)}"
+//            )
+//            showPushToTalkButton = peerConnectionState == PeerConnectionState.Success
+//        }
+//
+//        override fun onAudioStatusChange(audioStatus: AudioStatus) {
+//            status = audioStatus.name
+//            Log.d(
+//                "Talker SDK",
+//                "audioStatus : ${audioStatus.name}"
+//            )
+//        }
+//    }
 
-        override fun onAudioStatusChange(audioStatus: AudioStatus) {
-            status = audioStatus.name
-            Log.d(
-                "alkdlskd",
-                "audioStatus : ${audioStatus.name}"
-            )
-        }
+    // get event for changing of audio status
+    Talker.eventListener.onAudioStatusChange = { audioStatus: AudioStatus ->
+        status = audioStatus.name
+        Log.d(
+            "Talker SDK",
+            "audioStatus : ${audioStatus.name}"
+        )
+    }
+    // get event for changing of peer connection state
+    Talker.eventListener.onPeerConnectionStateChange = { peerConnectionState: PeerConnectionState, message: String ->
+        isLoading = false
+        Toast.makeText(context, peerConnectionState.name, Toast.LENGTH_SHORT).show()
+        Log.d(
+            "Talker SDK",
+            "peerConnectionState : ${peerConnectionState.name} ${Talker.getCurrentUserId(context)} $message"
+        )
+        showPushToTalkButton = peerConnectionState == PeerConnectionState.Success
     }
 
 
@@ -115,27 +132,84 @@ fun SingleButtonSample(fcmToken: String) {
                 // if peer connection is not successful means that either it is failed or it is disconnected
                 // in such case show create user button
                 if (!showPushToTalkButton) {
-                    var name by remember {
-                        mutableStateOf("")
-                    }
-                    OutlinedTextField(value = name, onValueChange = { name = it })
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Button(onClick = {
-                        // check if name is not empty
-                        if (name.isNotEmpty()) {
-                            status = ""
-                            // start showing loader
-                            isLoading = true
-                            // create user and connect to peer and pass the listener and fcm token
-                            Talker.createUser(
-                                context,
-                                name,
-                                fcmToken,
-                                eventListener
-                            )
+                    if (Talker.getCurrentUserId(context).isEmpty()) {
+                        var name by remember {
+                            mutableStateOf("")
                         }
-                    }) {
-                        Text(text = "Create")
+                        OutlinedTextField(value = name, onValueChange = { name = it })
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Button(onClick = {
+                            // check if name is not empty
+                            if (name.isNotEmpty()) {
+                                status = ""
+                                // start showing loader
+                                isLoading = true
+                                // create user and connect to peer and pass the listener and fcm token
+                                Talker.createUser(
+                                    context,
+                                    name,
+                                    fcmToken,
+//                                    eventListener,
+                                    onSuccess = {
+                                        Toast.makeText(context, "Success", Toast.LENGTH_SHORT).show()
+                                        Log.d(
+                                            "Talker SDK",
+                                            "registrationState : Success} message : $it"
+                                        )
+                                    },
+                                    onFailure = {
+                                        showPushToTalkButton = false
+                                        isLoading = false
+                                        Toast.makeText(context, "Failure", Toast.LENGTH_SHORT).show()
+                                        Log.d(
+                                            "Talker SDK",
+                                            "registrationState : Failure message : $it"
+                                        )
+                                    }
+                                )
+                            }
+                        }) {
+                            Text(text = "Create")
+                        }
+                    } else {
+                        var userName by remember {
+                            mutableStateOf(Talker.getCurrentUserId(context))
+                        }
+                        OutlinedTextField(value = userName, onValueChange = { userName = it })
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Button(onClick = {
+                            // check if name is not empty
+                            if (userName.isNotEmpty()) {
+                                status = ""
+                                // start showing loader
+                                isLoading = true
+                                // create user and connect to peer and pass the listener and fcm token
+                                Talker.sdkSetUser(
+                                    context,
+                                    userName,
+                                    fcmToken,
+//                                    eventListener,
+                                    onSuccess = {
+                                        Toast.makeText(context, "Success", Toast.LENGTH_SHORT).show()
+                                        Log.d(
+                                            "Talker SDK",
+                                            "registrationState : Success} message : $it"
+                                        )
+                                    },
+                                    onFailure = {
+                                        showPushToTalkButton = false
+                                        isLoading = false
+                                        Toast.makeText(context, "Failure", Toast.LENGTH_SHORT).show()
+                                        Log.d(
+                                            "Talker SDK",
+                                            "registrationState : Failure message : $it"
+                                        )
+                                    }
+                                )
+                            }
+                        }) {
+                            Text(text = "Login")
+                        }
                     }
                 } else {
                     val interactionSource = remember {
@@ -145,7 +219,6 @@ fun SingleButtonSample(fcmToken: String) {
                         interactionSource.interactions.collect() {
                             when (it) {
                                 is PressInteraction.Press -> {
-
                                     // when user presses the button call this function to start sharing audio
                                     // it will return boolean which will inform user if the channel is available for
                                     // sending audio data or not
@@ -185,7 +258,6 @@ fun SingleButtonSample(fcmToken: String) {
                         Text(text = "Push to talk")
                     }
                     Spacer(modifier = Modifier.height(50.dp))
-
                     Button(
                         onClick = {
                             isLoading = true

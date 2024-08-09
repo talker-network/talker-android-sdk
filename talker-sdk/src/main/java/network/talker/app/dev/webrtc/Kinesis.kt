@@ -1,13 +1,14 @@
-package network.talker.app.dev
+package network.talker.app.dev.webrtc
 
 import android.app.Application
 import android.util.Log
 import com.amazonaws.auth.AWSCredentialsProvider
 import com.amazonaws.mobile.client.AWSMobileClient
+import network.talker.app.dev.LOG_TAG
 import org.json.JSONException
 import org.json.JSONObject
 
-internal object KinesisTalkerApp : Application() {
+internal object Kinesis : Application() {
     val credentialsProvider: AWSCredentialsProvider
         get() = AWSMobileClient.getInstance()
 

@@ -29,4 +29,11 @@ internal class SharedPreference(private val context : Context) {
             user_auth_token = sharedPreference.getString("user_auth_token", "") ?: "",
         )
     }
+
+    fun clearPreference(){
+        sharedPreference.edit().apply {
+            clear()
+            commit()
+        }
+    }
 }

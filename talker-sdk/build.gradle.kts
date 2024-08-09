@@ -71,4 +71,7 @@ dependencies {
 
 
     implementation("org.apache.commons:commons-lang3:3.9")
+
+
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
 }

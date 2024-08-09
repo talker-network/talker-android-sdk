@@ -25,7 +25,14 @@ import kotlin.random.Random
 
 class AudioPlayerService : Service() {
     private var player: ExoPlayer? = null
-    val mediaLinkList = mutableListOf<String>()
+    private val mediaLinkList = mutableListOf<String>()
+    // first string is for channel id
+    // second Array<String> is for storing list of media_links that we are going to play
+    private val liveMsgQue : MutableMap<String, Array<String>> = mutableMapOf()
+    // this contains the list of channel id's whose media_links are currently in the que for playing
+    private val liveMsgPrty : MutableList<String> = mutableListOf()
+    // this will store the current playing media link
+    private var currentLiveMessage : String? = null
     override fun onBind(intent: Intent?): IBinder? {
         return null
     }
@@ -35,54 +42,99 @@ class AudioPlayerService : Service() {
             @OptIn(UnstableApi::class)
             override fun onReceive(context: Context?, intent: Intent?) {
                 context ?: return
-                val audioUrl = intent?.extras?.getString("media_link")
+                val audioUrl = intent?.extras?.getString("media_link") ?: ""
+                val channelId = intent?.extras?.getString("channel_id") ?: ""
                 Log.d(
                     "media_link",
                     "media_link : $audioUrl"
                 )
-                mediaLinkList.add(audioUrl ?: "")
-                Handler(Looper.getMainLooper()).post {
-                    if (player == null || mediaLinkList.size == 1){
-                        playAudio()
-                    }
-                }
+                Log.d(
+                    "channel_id",
+                    "channel_id : $channelId"
+                )
+                liveMsgQue[channelId] = liveMsgQue.getOrDefault(channelId, arrayOf()) + audioUrl
+                liveMsgPrty.add(channelId)
+                nextLiveMsg()
             }
         }
         super.onCreate()
         registerReceiver(broadCastReceiver, IntentFilter("audio_player.sdk"), RECEIVER_NOT_EXPORTED)
     }
 
+
     @OptIn(UnstableApi::class)
-    private fun playAudio(){
-        Log.d(
-            "play_audio",
-            "play_audio called..."
-        )
-        val notificationManager = getSystemService(NotificationManager::class.java)
-        player = ExoPlayer.Builder(this@AudioPlayerService).build()
-        player?.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED){
-                    mediaLinkList.removeAt(0)
-                    if (mediaLinkList.isNotEmpty()){
-                        playAudio()
-                    }else{
-                        notificationManager.cancel(1)
+    private fun nextLiveMsg(){
+        if (currentLiveMessage == null){
+            if (liveMsgPrty.isNotEmpty()){
+                val channelId = liveMsgPrty[0]
+                val q = liveMsgQue[channelId]?.toMutableList()
+                if (q?.isNotEmpty() == true){
+                    currentLiveMessage = q[0]
+                    q.removeAt(0)
+                    liveMsgQue[channelId] = q.toTypedArray()
+                }
+                liveMsgPrty.removeAt(0)
+            }
+        }
+
+        currentLiveMessage?.let {
+            val notificationManager = getSystemService(NotificationManager::class.java)
+            player = ExoPlayer.Builder(this@AudioPlayerService).build()
+            player?.addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_ENDED){
+                        if (liveMsgQue.isEmpty()){
+                            notificationManager.cancel(1)
+                        }
+                        currentLiveMessage = null
+                        nextLiveMsg()
                     }
                 }
+            })
+            val hlsUri = Uri.parse(currentLiveMessage)
+            val dataSourceFactory = DefaultHttpDataSource.Factory()
+            val hlsMediaSource = HlsMediaSource.Factory(dataSourceFactory).createMediaSource(
+                MediaItem.fromUri(hlsUri)
+            )
+            player?.addMediaSource(hlsMediaSource)
+            player?.prepare()
+            player?.apply {
+                playWhenReady = true
             }
-        })
-        val hlsUri = Uri.parse(mediaLinkList[0])
-        val dataSourceFactory = DefaultHttpDataSource.Factory()
-        val hlsMediaSource = HlsMediaSource.Factory(dataSourceFactory).createMediaSource(
-            MediaItem.fromUri(hlsUri)
-        )
-        player?.addMediaSource(hlsMediaSource)
-        player?.prepare()
-        player?.apply {
-            playWhenReady = true
         }
     }
+
+//    @OptIn(UnstableApi::class)
+//    private fun playAudio(){
+//        Log.d(
+//            "play_audio",
+//            "play_audio called..."
+//        )
+//        val notificationManager = getSystemService(NotificationManager::class.java)
+//        player = ExoPlayer.Builder(this@AudioPlayerService).build()
+//        player?.addListener(object : Player.Listener {
+//            override fun onPlaybackStateChanged(playbackState: Int) {
+//                if (playbackState == Player.STATE_ENDED){
+//                    mediaLinkList.removeAt(0)
+//                    if (mediaLinkList.isNotEmpty()){
+//                        playAudio()
+//                    }else{
+//                        notificationManager.cancel(1)
+//                    }
+//                }
+//            }
+//        })
+//        val hlsUri = Uri.parse(mediaLinkList[0])
+//        val dataSourceFactory = DefaultHttpDataSource.Factory()
+//        val hlsMediaSource = HlsMediaSource.Factory(dataSourceFactory).createMediaSource(
+//            MediaItem.fromUri(hlsUri)
+//        )
+//        player?.addMediaSource(hlsMediaSource)
+//        player?.prepare()
+//        player?.apply {
+//            playWhenReady = true
+//        }
+//    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val notificationManager = getSystemService(NotificationManager::class.java)

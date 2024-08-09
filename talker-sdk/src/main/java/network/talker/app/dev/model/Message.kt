@@ -37,7 +37,6 @@ internal class Message {
          */
         fun createAnswerMessage(
             sessionDescription: SessionDescription,
-            master: Boolean,
             recipientClientId: String
         ): Message {
             val description = sessionDescription.description

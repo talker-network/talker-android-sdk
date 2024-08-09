@@ -53,12 +53,14 @@ fun Talker.handleIntent(intent: Intent?, context: Context) {
 
             try {
                 val url = JsonParser.parseString(intent.extras?.getString("data")).asJsonObject["media_link"].asString
+                val channelId = JsonParser.parseString(intent.extras?.getString("data")).asJsonObject["channel_id"].asString
                 context.sendBroadcast(
                     Intent()
                         .setPackage(context.packageName)
                         .setAction("audio_player.sdk")
                         .apply {
                             putExtra("media_link", url)
+                            putExtra("channel_id", channelId)
                         }
                 )
             } catch (e : Exception){
