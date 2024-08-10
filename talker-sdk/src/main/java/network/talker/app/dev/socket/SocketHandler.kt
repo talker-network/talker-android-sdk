@@ -46,7 +46,7 @@ internal object SocketHandler {
                     .setAction("com.talker.sdk")
                     .apply {
                         putExtra("action", "CONNECTION_FAILURE")
-                        putExtra("message", e.localizedMessage)
+                        putExtra("message", "Error from websocket : " + e.localizedMessage)
                         putExtra(
                             "failure_from", "SOCKET"
                         )

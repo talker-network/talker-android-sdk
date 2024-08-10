@@ -31,7 +31,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import network.talker.app.dev.webrtc.AudioStatus
-import network.talker.app.dev.webrtc.PeerConnectionState
+import network.talker.app.dev.webrtc.ServerConnectionState
 import network.talker.app.dev.Talker
 
 @Composable
@@ -93,14 +93,24 @@ fun DoubleButtonSample(fcmToken: String) {
             "audioStatus : ${audioStatus.name}"
         )
     }
-    Talker.eventListener.onPeerConnectionStateChange = { peerConnectionState: PeerConnectionState, message: String ->
+    Talker.eventListener.onServerConnectionChange = { serverConnectionState: ServerConnectionState, message: String ->
         isLoading = false
-        Toast.makeText(context, peerConnectionState.name, Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, serverConnectionState.name, Toast.LENGTH_SHORT).show()
         Log.d(
             "Talker SDK",
-            "peerConnectionState : ${peerConnectionState.name} ${Talker.getCurrentUserId(context)}"
+            "peerConnectionState : ${serverConnectionState.name} ${Talker.getCurrentUserId(context)}"
         )
-        showPushToTalkButton = peerConnectionState == PeerConnectionState.Success
+        when(serverConnectionState) {
+            ServerConnectionState.Success -> {
+                showPushToTalkButton = true
+            }
+            ServerConnectionState.Failure -> {
+
+            }
+            ServerConnectionState.Closed -> {
+                showPushToTalkButton = false
+            }
+        }
     }
 
     if (isLoading) {

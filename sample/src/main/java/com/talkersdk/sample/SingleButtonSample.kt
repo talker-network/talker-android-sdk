@@ -33,7 +33,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import network.talker.app.dev.Talker
 import network.talker.app.dev.webrtc.AudioStatus
-import network.talker.app.dev.webrtc.PeerConnectionState
+import network.talker.app.dev.webrtc.ServerConnectionState
 
 @Composable
 fun SingleButtonSample(fcmToken: String) {
@@ -93,14 +93,24 @@ fun SingleButtonSample(fcmToken: String) {
         )
     }
     // get event for changing of peer connection state
-    Talker.eventListener.onPeerConnectionStateChange = { peerConnectionState: PeerConnectionState, message: String ->
+    Talker.eventListener.onServerConnectionChange = { serverConnectionState: ServerConnectionState, message: String ->
         isLoading = false
-        Toast.makeText(context, peerConnectionState.name, Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, serverConnectionState.name, Toast.LENGTH_SHORT).show()
         Log.d(
             "Talker SDK",
-            "peerConnectionState : ${peerConnectionState.name} ${Talker.getCurrentUserId(context)} $message"
+            "peerConnectionState : ${serverConnectionState.name} ${Talker.getCurrentUserId(context)} $message"
         )
-        showPushToTalkButton = peerConnectionState == PeerConnectionState.Success
+        when(serverConnectionState) {
+            ServerConnectionState.Success -> {
+                showPushToTalkButton = true
+            }
+            ServerConnectionState.Failure -> {
+
+            }
+            ServerConnectionState.Closed -> {
+                showPushToTalkButton = false
+            }
+        }
     }
 
 

@@ -105,7 +105,7 @@ internal class CreateLocalPeerConnection(
                                     .setAction("com.talker.sdk")
                                     .apply {
                                         putExtra("action", "CONNECTION_FAILURE")
-                                        putExtra("message", "Peer connection failed")
+                                        putExtra("message", "Webrtc Error : Peer connection failed")
                                         putExtra("failure_from", "WEBRTC")
                                     }
                             )

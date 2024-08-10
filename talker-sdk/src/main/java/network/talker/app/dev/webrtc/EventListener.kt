@@ -1,6 +1,6 @@
 package network.talker.app.dev.webrtc
 
-enum class PeerConnectionState {
+enum class ServerConnectionState {
     Success,
     Failure,
     Closed

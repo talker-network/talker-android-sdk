@@ -27,7 +27,6 @@ import com.amazonaws.services.kinesisvideo.model.ResourceEndpointListItem
 import com.amazonaws.services.kinesisvideosignaling.model.IceServer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import network.talker.app.dev.model.Event
 import network.talker.app.dev.model.Message
@@ -44,7 +43,7 @@ import network.talker.app.dev.webrtc.AudioStatus
 import network.talker.app.dev.webrtc.CreateLocalPeerConnection
 import network.talker.app.dev.webrtc.Kinesis
 import network.talker.app.dev.webrtc.KinesisVideoSdpObserver
-import network.talker.app.dev.webrtc.PeerConnectionState
+import network.talker.app.dev.webrtc.ServerConnectionState
 import network.talker.app.dev.webrtc.UpdateSignalingChannelInfoTask
 import network.talker.app.dev.webrtc.checkAndAddIceCandidate
 import network.talker.app.dev.webrtc.createSdpAnswer
@@ -117,7 +116,7 @@ object Talker {
     private var hasToRetry = false
     private var isFirstTime = true
     class EventListeners {
-        var onPeerConnectionStateChange : ((peerConnectionState: PeerConnectionState, message : String) -> Unit)? = null
+        var onServerConnectionChange : ((serverConnectionState: ServerConnectionState, message : String) -> Unit)? = null
         var onAudioStatusChange : ((audioStatus: AudioStatus) -> Unit)? = null
     }
 
@@ -302,14 +301,21 @@ object Talker {
         validateSDKKey()
         if (hasToRetry){
             hasToRetry = false
+            this@Talker.retryCount = 0
+            sendBroadCast(
+                "CONNECTING",
+                "Connection Retrying...."
+            )
             applicationContext?.let {
-                establishConnection(
-                    it,
-                    mChannelName,
-                    mRegion
-                )
+                closeConnectionForRetry {
+                    establishConnection(
+                        it,
+                        mChannelName,
+                        mRegion
+                    )
+                }
             }
-        }else{
+        } else {
             sendBroadCast(
                 "CONNECTING",
                 "Getting info about channel availability"
@@ -399,6 +405,53 @@ object Talker {
         }
     }
 
+    // close everything....
+    private fun closeConnectionForRetry(
+        onComplete : () -> Unit
+    ) {
+        runOnUiThread {
+            synchronized(this) {
+                hasStartedTalking = false
+                validateSDKKey()
+                class MyWorker(context: Context, workerParameters: WorkerParameters) :
+                    Worker(context, workerParameters) {
+                    override fun doWork(): Result {
+                        SocketHandler.broadCastStop(mChannelId)
+                        SocketHandler.closeConnection()
+                        audioManager?.mode = originalAudioMode
+                        audioManager?.isSpeakerphoneOn = originalSpeakerphoneOn
+                        pendingIceCandidatesMap.clear()
+                        peerConnectionFoundMap.clear()
+                        peerConnectionFoundMap.clear()
+                        pendingIceCandidatesMap.clear()
+                        createLocalPeerConnection?.closeAll()
+                        localPeer?.let {
+                            it.close()
+                            it.dispose()
+                            localPeer = null
+                        }
+                        client?.disconnect()
+                        client = null
+                        onComplete()
+                        return Result.success()
+                    }
+                }
+                try {
+                    val workRequestBuilder = OneTimeWorkRequestBuilder<MyWorker>()
+                        .build()
+                    applicationContext?.let {
+                        WorkManager.getInstance(it).enqueue(workRequestBuilder)
+                    }
+                } catch (e: Exception) {
+                    if (TalkerGlobalVariables.printLogs) {
+                        Log.e(LOG_TAG, "Error while closing and disposing localPeer", e)
+                    }
+                }
+
+            }
+        }
+    }
+
 //    private fun logoutUser(
 //        onLogoutSuccess: (message: String) -> Unit = {}
 //    ) {
@@ -440,8 +493,8 @@ object Talker {
                 .getOrNull(2) ?: ""
             if (!isUserLoggedIn()) {
                 getMainLooper {
-                    eventListener.onPeerConnectionStateChange?.invoke(
-                        PeerConnectionState.Failure,
+                    eventListener.onServerConnectionChange?.invoke(
+                        ServerConnectionState.Failure,
                         "User not logged in"
                     )
                 }
@@ -467,8 +520,8 @@ object Talker {
                                     retryCount = 0
                                     SocketHandler.setSocket(sharedPreference.getUserData().user_auth_token, applicationContext)
                                     SocketHandler.establishConnection(applicationContext)
-                                    eventListener.onPeerConnectionStateChange?.invoke(
-                                        PeerConnectionState.Success,
+                                    eventListener.onServerConnectionChange?.invoke(
+                                        ServerConnectionState.Success,
                                         "Peer connected successfully"
                                     )
                                 }
@@ -484,8 +537,8 @@ object Talker {
                                         isFirstTime = false
                                         hasToRetry = false
                                         retryCount = 0
-                                        eventListener.onPeerConnectionStateChange?.invoke(
-                                            PeerConnectionState.Failure,
+                                        eventListener.onServerConnectionChange?.invoke(
+                                            ServerConnectionState.Failure,
                                             message ?: "Error"
                                         )
                                         hasStartedTalking = false
@@ -503,18 +556,24 @@ object Talker {
                                                     "CONNECTION_FAILURE : $failureFrom"
                                                 )
                                             }
-                                            if (failureFrom == "WEBRTC"){
-                                                establishConnection(
-                                                    applicationContext,
-                                                    channelName,
-                                                    region
-                                                )
-                                            }
-                                            if (failureFrom == "SOCKET"){
-                                                SocketHandler.setSocket(sharedPreference.getUserData().user_auth_token, applicationContext)
-                                                SocketHandler.establishConnection(applicationContext)
+                                            closeConnectionForRetry {
+                                                if (failureFrom == "WEBRTC"){
+                                                    establishConnection(
+                                                        applicationContext,
+                                                        channelName,
+                                                        region
+                                                    )
+                                                }
+                                                if (failureFrom == "SOCKET"){
+                                                    SocketHandler.setSocket(sharedPreference.getUserData().user_auth_token, applicationContext)
+                                                    SocketHandler.establishConnection(applicationContext)
+                                                }
                                             }
                                         }else{
+                                            eventListener.onServerConnectionChange?.invoke(
+                                                ServerConnectionState.Failure,
+                                                message ?: "Error"
+                                            )
                                             hasToRetry = true
                                         }
                                     }
@@ -527,8 +586,8 @@ object Talker {
                                         isFirstTime = false
                                         hasToRetry = false
                                         retryCount = 0
-                                        eventListener.onPeerConnectionStateChange?.invoke(
-                                            PeerConnectionState.Closed,
+                                        eventListener.onServerConnectionChange?.invoke(
+                                            ServerConnectionState.Closed,
                                             "Peer connection closed"
                                         )
                                         hasStartedTalking = false
@@ -839,13 +898,13 @@ object Talker {
                             override fun onError(event: Event) {
                                 if (TalkerGlobalVariables.printLogs) {
                                     Log.e(
-                                        LOG_TAG, "Received error in signaling client : ${event}"
+                                        LOG_TAG, "Received error in signaling client : $event"
                                     )
                                     return
                                 }
                                 sendBroadCast(
                                     "CONNECTION_FAILURE",
-                                    "Received error in signaling client : ${event}",
+                                    "Received Webrtc error in signaling client : $event",
                                     "WEBRTC"
                                 )
                             }
@@ -860,7 +919,7 @@ object Talker {
                                 }
                                 sendBroadCast(
                                     "CONNECTION_FAILURE",
-                                    "Signaling client returned exception: " + e.message,
+                                    "Signaling client returned Webrtc exception: " + e.message,
                                     "WEBRTC"
                                 )
                             }
@@ -892,7 +951,7 @@ object Talker {
                             if (client?.isOpen == false) {
                                 sendBroadCast(
                                     "CONNECTION_FAILURE",
-                                    "Client connection failed",
+                                    "Webrtc Client connection failed",
                                     "WEBRTC"
                                 )
                             }
@@ -904,7 +963,7 @@ object Talker {
                             }
                             sendBroadCast(
                                 "CONNECTION_FAILURE",
-                                "Exception with websocket client: $e",
+                                "Webrtc Exception with websocket client: $e",
                                 "WEBRTC"
                             )
                         }
@@ -962,14 +1021,14 @@ object Talker {
                             }
                             sendBroadCast(
                                 "CONNECTION_FAILURE",
-                                "Error in connecting to signaling service",
+                                "Webrtc Error in connecting to signaling service",
                                 "WEBRTC"
                             )
                         }
                     } else {
                         sendBroadCast(
                             "CONNECTION_FAILURE",
-                            "Connection failed",
+                            "Webrtc Connection failed",
                             "WEBRTC"
                         )
                         return@sdkCredAPI
@@ -982,7 +1041,7 @@ object Talker {
                     )
                     sendBroadCast(
                         "CONNECTION_FAILURE",
-                        error.message,
+                        "Webrtc Error : " + error.message,
                         "WEBRTC"
                     )
                     return@sdkCredAPI
@@ -990,7 +1049,7 @@ object Talker {
                 onInternetNotAvailable = {
                     sendBroadCast(
                         "CONNECTION_FAILURE",
-                        "Network not available",
+                        "Webrtc Error : Network not available",
                         "WEBRTC"
                     )
                     return@sdkCredAPI
