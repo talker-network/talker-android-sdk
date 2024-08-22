@@ -8,4 +8,8 @@ internal object ApiRoutes {
     const val SET_USER = "$CENTER_PART/set_user"
     const val  UPDATE_APNS_PTT = "$CENTER_PART/update_apns_ptt"
     const val  CRED = "$CENTER_PART/cred"
+    const val  GET_ALL_USERS = "/sdk/users"
+    const val  GET_ALL_CHANNELS = "/chat/channels"
+    const val  CREATE_CHANNEL = "/chat/channel"
+    const val  EDIT_CHANNEL = "chat/channel"
 }

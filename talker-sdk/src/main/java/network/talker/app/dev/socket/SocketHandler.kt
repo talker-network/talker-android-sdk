@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import com.amazonaws.mobile.auth.core.internal.util.ThreadUtils.runOnUiThread
+import com.google.gson.Gson
 import com.google.gson.JsonParser
 import io.socket.client.Ack
 import io.socket.client.IO
@@ -14,6 +15,13 @@ import io.socket.client.Socket
 import network.talker.app.dev.LOG_TAG
 import network.talker.app.dev.Talker
 import network.talker.app.dev.TalkerGlobalVariables
+import network.talker.app.dev.networking.data.AddNewAdminModelData
+import network.talker.app.dev.networking.data.AddNewParticipantModelData
+import network.talker.app.dev.networking.data.AdminRemoveModelData
+import network.talker.app.dev.networking.data.Channel
+import network.talker.app.dev.networking.data.GetAllUserModelData
+import network.talker.app.dev.networking.data.RemoveParticipantModelData
+import network.talker.app.dev.networking.data.UpdateChannelNameModelData
 import network.talker.app.dev.sharedPreference.SharedPreference
 import org.json.JSONObject
 import java.net.URI
@@ -154,6 +162,262 @@ internal object SocketHandler {
                             Log.d(
                                 LOG_TAG,
                                 "Socket broadcast_end error : ${e.message}"
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        socket?.on(
+            "new_channel"
+        ) { args ->
+            args.forEach { arg ->
+                if (arg is String) {
+                    runOnUiThread {
+                        try {
+                            Log.d(
+                                LOG_TAG,
+                                "Socket new_channel object : ${
+                                    JsonParser.parseString(
+                                        arg
+                                    ).asJsonObject
+                                }"
+                            )
+                            context.sendBroadcast(
+                                Intent()
+                                    .setPackage(context.packageName)
+                                    .setAction("com.talker.sdk")
+                                    .apply {
+                                        putExtra("action", "NEW_CHANNEL")
+                                        putExtra("message", "New channel added")
+                                        putExtra("channel_obj", Gson().fromJson(
+                                            arg,
+                                            Channel::class.java
+                                            )
+                                        )
+                                    }
+                            )
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            Log.d(
+                                LOG_TAG,
+                                "Socket new_channel error : ${e.message}"
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        socket?.on(
+            "room_name_update"
+        ) { args ->
+            args.forEach { arg ->
+                if (arg is String) {
+                    runOnUiThread {
+                        try {
+                            Log.d(
+                                LOG_TAG,
+                                "Socket room_name_update object : ${JsonParser.parseString(arg).asJsonObject}"
+                            )
+                            context.sendBroadcast(
+                                Intent()
+                                    .setPackage(context.packageName)
+                                    .setAction("com.talker.sdk")
+                                    .apply {
+                                        putExtra("action", "ROOM_NAME_UPDATE")
+                                        putExtra("message", "Channel name updated")
+                                        putExtra("channel_obj", Gson().fromJson(
+                                            arg,
+                                            UpdateChannelNameModelData::class.java
+                                            )
+                                        )
+                                    }
+                            )
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            Log.d(
+                                LOG_TAG,
+                                "Socket room_name_update error : ${e.message}"
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        socket?.on(
+            "room_participant_removed"
+        ) { args ->
+            args.forEach { arg ->
+                if (arg is String) {
+                    runOnUiThread {
+                        try {
+                            Log.d(
+                                LOG_TAG,
+                                "Socket room_participant_removed object : ${JsonParser.parseString(arg).asJsonObject}"
+                            )
+                            context.sendBroadcast(
+                                Intent()
+                                    .setPackage(context.packageName)
+                                    .setAction("com.talker.sdk")
+                                    .apply {
+                                        putExtra("action", "ROOM_PARTICIPANT_REMOVED")
+                                        putExtra("message", "Participant Removed")
+                                        putExtra("channel_obj", Gson().fromJson(
+                                            arg,
+                                            RemoveParticipantModelData::class.java
+                                            )
+                                        )
+                                    }
+                            )
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            Log.d(
+                                LOG_TAG,
+                                "Socket room_name_update error : ${e.message}"
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        socket?.on(
+            "room_participant_added"
+        ) { args ->
+            args.forEach { arg ->
+                if (arg is String) {
+                    runOnUiThread {
+                        try {
+                            Log.d(
+                                LOG_TAG,
+                                "Socket room_participant_added object : ${JsonParser.parseString(arg).asJsonObject}"
+                            )
+                            context.sendBroadcast(
+                                Intent()
+                                    .setPackage(context.packageName)
+                                    .setAction("com.talker.sdk")
+                                    .apply {
+                                        putExtra("action", "ROOM_PARTICIPANT_ADDED")
+                                        putExtra("message", "Participant added")
+                                        putExtra("channel_obj", Gson().fromJson(
+                                            arg,
+                                            AddNewParticipantModelData::class.java
+                                            )
+                                        )
+                                    }
+                            )
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            Log.d(
+                                LOG_TAG,
+                                "Socket room_participant_added error : ${e.message}"
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        socket?.on(
+            "new_sdk_user"
+        ) { args ->
+            args.forEach { arg ->
+                if (arg is String) {
+                    runOnUiThread {
+                        try {
+                            Log.d(
+                                LOG_TAG,
+                                "Socket new_sdk_user object : ${JsonParser.parseString(arg).asJsonObject}"
+                            )
+                            context.sendBroadcast(
+                                Intent()
+                                    .setPackage(context.packageName)
+                                    .setAction("com.talker.sdk")
+                                    .apply {
+                                        putExtra("action", "NEW_SDK_USER")
+                                        putExtra("message", "New user created")
+                                        putExtra("channel_obj", Gson().fromJson(
+                                            arg,
+                                            GetAllUserModelData::class.java
+                                            )
+                                        )
+                                    }
+                            )
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            Log.d(
+                                LOG_TAG,
+                                "Socket new_sdk_user error : ${e.message}"
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        socket?.on(
+            "room_admin_added"
+        ) { args ->
+            args.forEach { arg ->
+                if (arg is String) {
+                    runOnUiThread {
+                        try {
+                            Log.d(
+                                LOG_TAG,
+                                "Socket room_admin_added object : ${JsonParser.parseString(arg).asJsonObject}"
+                            )
+                            context.sendBroadcast(
+                                Intent()
+                                    .setPackage(context.packageName)
+                                    .setAction("com.talker.sdk")
+                                    .apply {
+                                        putExtra("action", "ROOM_ADMIN_ADDED")
+                                        putExtra("message", "New room admin added")
+                                        putExtra("channel_obj", Gson().fromJson(
+                                            arg,
+                                            AddNewAdminModelData::class.java
+                                            )
+                                        )
+                                    }
+                            )
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            Log.d(
+                                LOG_TAG,
+                                "Socket room_admin_added error : ${e.message}"
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        socket?.on(
+            "room_admin_removed"
+        ) { args ->
+            args.forEach { arg ->
+                if (arg is String) {
+                    runOnUiThread {
+                        try {
+                            Log.d(
+                                LOG_TAG,
+                                "Socket room_admin_removed object : ${JsonParser.parseString(arg).asJsonObject}"
+                            )
+                            context.sendBroadcast(
+                                Intent()
+                                    .setPackage(context.packageName)
+                                    .setAction("com.talker.sdk")
+                                    .apply {
+                                        putExtra("action", "ROOM_ADMIN_REMOVED")
+                                        putExtra("message", "New room admin added")
+                                        putExtra("channel_obj", Gson().fromJson(
+                                            arg,
+                                            AdminRemoveModelData::class.java
+                                            )
+                                        )
+                                    }
+                            )
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            Log.d(
+                                LOG_TAG,
+                                "Socket room_admin_removed error : ${e.message}"
                             )
                         }
                     }

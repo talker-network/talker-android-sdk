@@ -9,11 +9,14 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.util.Base64
 import android.util.Log
+import android.widget.Toast
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
@@ -30,9 +33,25 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import network.talker.app.dev.model.Event
 import network.talker.app.dev.model.Message
+import network.talker.app.dev.networking.calls.sdkAddNewAdmin
+import network.talker.app.dev.networking.calls.sdkAddNewParticipant
+import network.talker.app.dev.networking.calls.sdkCreateChannel
 import network.talker.app.dev.networking.calls.sdkCreateUser
 import network.talker.app.dev.networking.calls.sdkCredAPI
+import network.talker.app.dev.networking.calls.sdkGetAllChannels
+import network.talker.app.dev.networking.calls.sdkGetAllUsersApi
+import network.talker.app.dev.networking.calls.sdkRemoveAdmin
+import network.talker.app.dev.networking.calls.sdkRemoveParticipant
 import network.talker.app.dev.networking.calls.sdkSetUser
+import network.talker.app.dev.networking.calls.sdkUpdateChannelName
+import network.talker.app.dev.networking.data.AddNewAdminModelData
+import network.talker.app.dev.networking.data.AddNewParticipantModelData
+import network.talker.app.dev.networking.data.AdminRemoveModelData
+import network.talker.app.dev.networking.data.Channel
+import network.talker.app.dev.networking.data.CreateChannelModel
+import network.talker.app.dev.networking.data.GetAllUserModelData
+import network.talker.app.dev.networking.data.RemoveParticipantModelData
+import network.talker.app.dev.networking.data.UpdateChannelNameModelData
 import network.talker.app.dev.okhttp.SignalingListener
 import network.talker.app.dev.okhttp.SignalingServiceWebSocketClient
 import network.talker.app.dev.sharedPreference.SharedPreference
@@ -115,12 +134,23 @@ object Talker {
     private var retryCount = 0
     private var hasToRetry = false
     private var isFirstTime = true
+    private var channelList: List<Channel> = emptyList()
+    private var userList: List<GetAllUserModelData> = emptyList()
+
     class EventListeners {
-        var onServerConnectionChange : ((serverConnectionState: ServerConnectionState, message : String) -> Unit)? = null
-        var onAudioStatusChange : ((audioStatus: AudioStatus) -> Unit)? = null
+        var onServerConnectionChange: ((serverConnectionState: ServerConnectionState, message: String) -> Unit)? =
+            null
+        var onAudioStatusChange: ((audioStatus: AudioStatus) -> Unit)? = null
+        var onNewChannel: ((data: Channel) -> Unit)? = null
+        var onChannelUpdated: ((data: UpdateChannelNameModelData) -> Unit)? = null
+        var onRemovedUserFromChannel: ((data: RemoveParticipantModelData) -> Unit)? = null
+        var onAddedUserInChannel: ((data: AddNewParticipantModelData) -> Unit)? = null
+        var onNewSdkUser: ((data: GetAllUserModelData) -> Unit)? = null
+        var onAdminAdded: ((data: AddNewAdminModelData) -> Unit)? = null
+        var onAdminRemoved: ((data: AdminRemoveModelData) -> Unit)? = null
     }
 
-    val eventListener : EventListeners = EventListeners()
+    val eventListener: EventListeners = EventListeners()
 
     private fun validateSDKKey() {
         if (sdkKey.isEmpty()) {
@@ -147,13 +177,19 @@ object Talker {
         channelName: String = "",
         region: String = "",
     ) {
+        Talker.applicationContext = context
         validateSDKKey()
-
         hasStartedTalking = false
         retryCount = 0
         hasToRetry = false
         isFirstTime = true
         val sharedPreference = SharedPreference(context)
+        CoroutineScope(Dispatchers.IO).launch {
+            getChannelList()
+        }
+        CoroutineScope(Dispatchers.IO).launch {
+            getAllUsers()
+        }
         sdkCreateUser(context, name = name, onSuccess = { res ->
             sharedPreference.setUserData(res.data)
             TalkerSDKApplication().auth.signIn(res.data.a_username,
@@ -223,6 +259,7 @@ object Talker {
         channelName: String = "",
         region: String = "",
     ) {
+        Talker.applicationContext = context
         validateSDKKey()
         if (userName.isEmpty()) {
 //            eventListener.onRegistrationStateChange(
@@ -232,6 +269,13 @@ object Talker {
             onFailure("Username cannot be empty")
             return
         }
+        CoroutineScope(Dispatchers.IO).launch {
+            getChannelList()
+        }
+        CoroutineScope(Dispatchers.IO).launch {
+            getAllUsers()
+        }
+
         sdkSetUser(
             context,
             this.sdkKey,
@@ -297,9 +341,259 @@ object Talker {
         )
     }
 
-    fun startPttAudio(isChannelAvailable: (Boolean) -> Unit) {
+    fun getChannelList(onChannelFetched: (List<Channel>) -> Unit = {}) {
         validateSDKKey()
-        if (hasToRetry){
+        if (!isUserLoggedIn()) {
+            Log.d(
+                LOG_TAG,
+                "Kindly create or login first"
+            )
+            return
+        }
+        if (channelList.isEmpty()) {
+            applicationContext?.let {
+                sdkGetAllChannels(
+                    it,
+                    SharedPreference(applicationContext!!).getUserData().user_auth_token,
+                    onSuccess = {
+                        runOnUiThread {
+                            channelList = it.data.channels
+                            onChannelFetched(it.data.channels)
+                        }
+                    },
+                    onError = {
+                        runOnUiThread {
+                            onChannelFetched(emptyList())
+                        }
+                    },
+                    onInternetNotAvailable = {
+                        runOnUiThread {
+                            onChannelFetched(emptyList())
+                        }
+                    }
+                )
+            }
+        } else {
+            runOnUiThread {
+                onChannelFetched(channelList)
+            }
+        }
+    }
+
+    fun getAllUsers(onUsersFetched: (List<GetAllUserModelData>) -> Unit = {}) {
+        validateSDKKey()
+        if (!isUserLoggedIn()) {
+            Log.d(
+                LOG_TAG,
+                "Kindly create or login first"
+            )
+            return
+        }
+        if (channelList.isEmpty()) {
+            applicationContext?.let {
+                sdkGetAllUsersApi(
+                    it,
+                    sdkKey,
+                    onSuccess = {
+                        runOnUiThread {
+                            userList = it.data
+                            onUsersFetched(it.data.sortedBy { it.name })
+                        }
+                    },
+                    onError = {
+                        runOnUiThread {
+                            onUsersFetched(emptyList())
+                        }
+                    },
+                    onInternetNotAvailable = {
+                        runOnUiThread {
+                            onUsersFetched(emptyList())
+                        }
+                    }
+                )
+            }
+        } else {
+            runOnUiThread {
+                onUsersFetched(userList)
+            }
+        }
+    }
+
+    fun editChannelName(
+        context: Context,
+        new_name: String,
+        channelId: String,
+        onSuccess: (newName: String) -> Unit,
+        onFailure: () -> Unit
+    ) {
+        validateSDKKey()
+        sdkUpdateChannelName(
+            context,
+            SharedPreference(context).getUserData().user_auth_token,
+            channelId,
+            new_name,
+            onSuccess = {
+                if (it.success) {
+                    channelList.find { channel ->
+                        channel.channel_id == channelId
+                    }?.group_name = new_name
+                    onSuccess(it.data.new_name)
+                } else {
+                    onFailure()
+                }
+            },
+            onError = {
+                onFailure()
+            },
+            onInternetNotAvailable = {
+                onFailure()
+            }
+
+        )
+    }
+
+    fun removeParticipant(
+        context: Context,
+        removingParticipant: String,
+        channelId: String,
+        onSuccess: (message: String) -> Unit,
+        onFailure: () -> Unit
+    ) {
+        validateSDKKey()
+        sdkRemoveParticipant(
+            context,
+            SharedPreference(context).getUserData().user_auth_token,
+            channelId,
+            removingParticipant,
+            onSuccess = {
+                if (it.success) {
+                    onSuccess("Participant removed")
+                } else {
+                    onFailure()
+                }
+            },
+            onError = {
+                if (TalkerGlobalVariables.printLogs) {
+                    Log.d(
+                        LOG_TAG,
+                        "Error : ${it.message}"
+                    )
+                }
+                onFailure()
+            },
+            onInternetNotAvailable = {
+                onFailure()
+            }
+        )
+    }
+
+    fun addParticipant(
+        context: Context,
+        channelId: String,
+        newParticipant: String,
+        onSuccess: (message: String) -> Unit,
+        onFailure: () -> Unit
+    ) {
+        validateSDKKey()
+        sdkAddNewParticipant(
+            context,
+            SharedPreference(context).getUserData().user_auth_token,
+            channelId,
+            newParticipant,
+            onSuccess = {
+                if (it.success) {
+                    onSuccess("Added SuccessFully")
+                } else {
+                    onFailure()
+                }
+            },
+            onError = {
+                onFailure()
+            },
+            onInternetNotAvailable = {
+                onFailure()
+            }
+        )
+    }
+
+    fun addAdmin(
+        context: Context,
+        channelId: String,
+        newAdminId: String,
+        onSuccess: (message: String) -> Unit,
+        onFailure: () -> Unit
+    ) {
+        validateSDKKey()
+        sdkAddNewAdmin(
+            context,
+            SharedPreference(context).getUserData().user_auth_token,
+            channelId,
+            newAdminId,
+            onSuccess = {
+                if (it.success) {
+                    onSuccess("Admin added")
+                } else {
+                    onFailure()
+                }
+            },
+            onError = {
+                onFailure()
+            },
+            onInternetNotAvailable = {
+                onFailure()
+            }
+        )
+    }
+
+    fun removeAdmin(
+        context: Context,
+        channelId: String,
+        removeAdminID: String,
+        onSuccess: (message: String) -> Unit,
+        onFailure: () -> Unit
+    ) {
+        validateSDKKey()
+        sdkRemoveAdmin(
+            context,
+            SharedPreference(context).getUserData().user_auth_token,
+            channelId,
+            removeAdminID,
+            onSuccess = {
+                if (it.success) {
+                    onSuccess("Admin removed")
+                } else {
+                    onFailure()
+                }
+            },
+            onError = {
+                onFailure()
+            },
+            onInternetNotAvailable = {
+                onFailure()
+            }
+        )
+    }
+
+//    private callGetChannelList() {
+//        sdkGetAllChannels(
+//            applicationContext,
+//            sdkKey,
+//            onSuccess = {
+//                return@sdkGetAllChannels
+//            },
+//            onError = {
+//
+//            },
+//            onInternetNotAvailable = {
+//
+//            }
+//        )
+//    }
+
+    fun startPttAudio(channelId: String, isChannelAvailable: (Boolean) -> Unit) {
+        validateSDKKey()
+        mChannelId = channelId
+        if (hasToRetry) {
             hasToRetry = false
             this@Talker.retryCount = 0
             sendBroadCast(
@@ -405,9 +699,69 @@ object Talker {
         }
     }
 
+
+    fun createGroupChannel(
+        context: Context,
+        name: String,
+        participantId: String,
+        onSuccess: (CreateChannelModel) -> Unit = {},
+        onError: (String) -> Unit = {},
+        onInternetNotAvailable: () -> Unit = {},
+    ) {
+        validateSDKKey()
+        sdkCreateChannel(
+            context,
+            sdkKey,
+            name,
+            participantId,
+            type = "group",
+            "",
+            Uri.EMPTY,
+            onSuccess,
+            onError = {
+                onError(it.message)
+            },
+            onInternetNotAvailable
+        )
+    }
+
+    fun createDirectChannel(
+        context: Context,
+        participantId: String,
+        onSuccess: (CreateChannelModel) -> Unit = {},
+        onError: (String) -> Unit = {},
+        onInternetNotAvailable: () -> Unit = {},
+    ) {
+        validateSDKKey()
+
+        Log.d(
+            LOG_TAG,
+            "Validated sdk key"
+        )
+        sdkCreateChannel(
+            context,
+            sdkKey,
+            "",
+            participantId,
+            type = "direct",
+            "",
+            Uri.EMPTY,
+            onSuccess,
+            onError = {
+                Log.d(
+                    LOG_TAG,
+                    "Error occured : ${it.message}"
+                )
+                onError(it.message)
+            },
+            onInternetNotAvailable
+        )
+    }
+
+
     // close everything....
     private fun closeConnectionForRetry(
-        onComplete : () -> Unit
+        onComplete: () -> Unit
     ) {
         runOnUiThread {
             synchronized(this) {
@@ -506,7 +860,7 @@ object Talker {
                     "Peer connecting..."
                 )
             }
-            if (retryCount == 0){
+            if (retryCount == 0) {
                 broadcastReceiver = object : BroadcastReceiver() {
                     override fun onReceive(context: Context?, intent: Intent?) {
                         val action = intent?.extras?.getString("action")
@@ -518,7 +872,10 @@ object Talker {
                                     isFirstTime = false
                                     hasToRetry = false
                                     retryCount = 0
-                                    SocketHandler.setSocket(sharedPreference.getUserData().user_auth_token, applicationContext)
+                                    SocketHandler.setSocket(
+                                        sharedPreference.getUserData().user_auth_token,
+                                        applicationContext
+                                    )
                                     SocketHandler.establishConnection(applicationContext)
                                     eventListener.onServerConnectionChange?.invoke(
                                         ServerConnectionState.Success,
@@ -532,7 +889,7 @@ object Talker {
                                     // if the user is not connecting for the first time and
                                     // also if retrying for less than 2nd time
                                     // then we need to retry
-                                    if (isFirstTime){
+                                    if (isFirstTime) {
                                         // else if we are coming for the first time and we get some error than we inform the user as failure
                                         isFirstTime = false
                                         hasToRetry = false
@@ -544,32 +901,37 @@ object Talker {
                                         hasStartedTalking = false
                                         closeConnection()
                                         applicationContext.unregisterReceiver(broadcastReceiver)
-                                    }else{
-                                        if (this@Talker.retryCount < 2){
+                                    } else {
+                                        if (this@Talker.retryCount < 2) {
                                             sendBroadCast(
                                                 "CONNECTING"
                                             )
                                             this@Talker.retryCount++
-                                            if (TalkerGlobalVariables.printLogs){
+                                            if (TalkerGlobalVariables.printLogs) {
                                                 Log.d(
                                                     LOG_TAG,
                                                     "CONNECTION_FAILURE : $failureFrom"
                                                 )
                                             }
                                             closeConnectionForRetry {
-                                                if (failureFrom == "WEBRTC"){
+                                                if (failureFrom == "WEBRTC") {
                                                     establishConnection(
                                                         applicationContext,
                                                         channelName,
                                                         region
                                                     )
                                                 }
-                                                if (failureFrom == "SOCKET"){
-                                                    SocketHandler.setSocket(sharedPreference.getUserData().user_auth_token, applicationContext)
-                                                    SocketHandler.establishConnection(applicationContext)
+                                                if (failureFrom == "SOCKET") {
+                                                    SocketHandler.setSocket(
+                                                        sharedPreference.getUserData().user_auth_token,
+                                                        applicationContext
+                                                    )
+                                                    SocketHandler.establishConnection(
+                                                        applicationContext
+                                                    )
                                                 }
                                             }
-                                        }else{
+                                        } else {
                                             eventListener.onServerConnectionChange?.invoke(
                                                 ServerConnectionState.Failure,
                                                 message ?: "Error"
@@ -592,7 +954,7 @@ object Talker {
                                         )
                                         hasStartedTalking = false
                                         applicationContext.unregisterReceiver(broadcastReceiver)
-                                    } catch (e: Exception){
+                                    } catch (e: Exception) {
                                         e.printStackTrace()
                                     }
                                 }
@@ -629,13 +991,246 @@ object Talker {
                                     )
                                 }
                             }
+
+                            "NEW_CHANNEL" -> {
+                                getMainLooper {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                        intent.getSerializableExtra(
+                                            "channel_obj", Channel::class.java
+                                        )?.let {
+                                            if (channelList.none { channel -> channel.channel_id == it.channel_id }) {
+                                                Log.d(
+                                                    LOG_TAG,
+                                                    "new_channel : $it"
+                                                )
+                                                channelList = channelList.toMutableList().apply {
+                                                    add(it)
+                                                }
+                                                eventListener.onNewChannel?.invoke(
+                                                    it
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        val channelObj = intent.getSerializableExtra(
+                                            "channel_obj"
+                                        ) as Channel
+                                        if (channelList.none { channel -> channel.channel_id == channelObj.channel_id }) {
+                                            Log.d(
+                                                LOG_TAG,
+                                                "new_channel : $channelObj"
+                                            )
+                                            channelList = channelList.toMutableList().apply {
+                                                add(channelObj)
+                                            }
+                                            eventListener.onNewChannel?.invoke(
+                                                channelObj
+                                            )
+                                        }
+                                    }
+                                    Toast.makeText(context, "New channel added", Toast.LENGTH_SHORT)
+                                        .show()
+                                }
+                            }
+
+                            "ROOM_NAME_UPDATE" -> {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    intent.getSerializableExtra(
+                                        "channel_obj", UpdateChannelNameModelData::class.java
+                                    )?.let {
+                                        channelList.find { channel ->
+                                            channel.channel_id == it.channel_id
+                                        }?.group_name = it.new_name
+                                        eventListener.onChannelUpdated?.invoke(
+                                            it
+                                        )
+                                    }
+                                } else {
+                                    val channelObj = intent.getSerializableExtra(
+                                        "channel_obj"
+                                    ) as UpdateChannelNameModelData
+                                    channelObj.let {
+                                        channelList.find { channel ->
+                                            channel.channel_id == it.channel_id
+                                        }?.group_name = it.new_name
+                                        eventListener.onChannelUpdated?.invoke(
+                                            it
+                                        )
+                                    }
+                                }
+                                Toast.makeText(context, "Name Updated", Toast.LENGTH_SHORT).show()
+                            }
+
+                            "ROOM_PARTICIPANT_REMOVED" -> {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    intent.getSerializableExtra(
+                                        "channel_obj", RemoveParticipantModelData::class.java
+                                    )?.let { removedUser ->
+                                        channelList.find { channel ->
+                                            channel.channel_id == removedUser.channel_id
+                                        }?.participants?.filter { user ->
+                                            user.user_id != removedUser.removed_participant
+                                        }?.let {
+                                            channelList.find { channel ->
+                                                channel.channel_id == removedUser.channel_id
+                                            }?.participants = it
+                                        }
+                                        eventListener.onRemovedUserFromChannel?.invoke(
+                                            removedUser
+                                        )
+                                    }
+                                } else {
+                                    val channelObj = intent.getSerializableExtra(
+                                        "channel_obj"
+                                    ) as RemoveParticipantModelData
+                                    channelObj.let { removedUser ->
+                                        channelList.find { channel ->
+                                            channel.channel_id == removedUser.channel_id
+                                        }?.participants?.filter { user ->
+                                            user.user_id != removedUser.removed_participant
+                                        }?.let {
+                                            channelList.find { channel ->
+                                                channel.channel_id == removedUser.channel_id
+                                            }?.participants = it
+                                        }
+                                        eventListener.onRemovedUserFromChannel?.invoke(
+                                            removedUser
+                                        )
+                                    }
+                                }
+                            }
+
+                            "ROOM_PARTICIPANT_ADDED" -> {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    intent.getSerializableExtra(
+                                        "channel_obj", AddNewParticipantModelData::class.java
+                                    )?.let { addedUser ->
+                                        val channel =
+                                            channelList.firstOrNull { it.channel_id == addedUser.channel_id }
+
+                                        if (channel?.participants?.none { it.user_id == addedUser.new_participants[0].user_id } == true) {
+                                            if (!channel.participants.contains(addedUser.new_participants[0])) {
+                                                channel.participants += addedUser.new_participants[0]
+                                            }
+                                        }
+                                        eventListener.onAddedUserInChannel?.invoke(
+                                            addedUser
+                                        )
+                                    }
+                                } else {
+                                    val channelObj = intent.getSerializableExtra(
+                                        "channel_obj"
+                                    ) as AddNewParticipantModelData
+                                    channelObj.let { addedUser ->
+                                        val channel =
+                                            channelList.firstOrNull { it.channel_id == addedUser.channel_id }
+                                        if (channel?.participants?.none { it.user_id == addedUser.new_participants[0].user_id } == true) {
+                                            if (!channel.participants.contains(addedUser.new_participants[0])) {
+                                                channel.participants += addedUser.new_participants[0]
+                                            }
+                                        }
+                                        eventListener.onAddedUserInChannel?.invoke(
+                                            addedUser
+                                        )
+                                    }
+                                }
+                            }
+
+                            "NEW_SDK_USER" -> {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    intent.getSerializableExtra(
+                                        "channel_obj", GetAllUserModelData::class.java
+                                    )?.let { newUser ->
+                                        if (!userList.contains(newUser)) {
+                                            userList += newUser
+                                        }
+                                        eventListener.onNewSdkUser?.invoke(
+                                            newUser
+                                        )
+                                    }
+                                } else {
+                                    val channelObj = intent.getSerializableExtra(
+                                        "channel_obj"
+                                    ) as GetAllUserModelData
+                                    channelObj.let { newUser ->
+                                        if (!userList.contains(newUser)) {
+                                            userList += newUser
+                                        }
+                                        eventListener.onNewSdkUser?.invoke(
+                                            newUser
+                                        )
+                                    }
+                                }
+                            }
+
+                            "ROOM_ADMIN_ADDED" -> {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    intent.getSerializableExtra(
+                                        "channel_obj", AddNewAdminModelData::class.java
+                                    )?.let { newAdmin ->
+                                        channelList.firstOrNull { channel ->
+                                            channel.channel_id == newAdmin.channel_id
+                                        }?.participants?.firstOrNull { user ->
+                                            user.user_id == newAdmin.new_admin
+                                        }?.admin = true
+                                        eventListener.onAdminAdded?.invoke(
+                                            newAdmin
+                                        )
+                                    }
+                                } else {
+                                    val channelObj = intent.getSerializableExtra(
+                                        "channel_obj"
+                                    ) as AddNewAdminModelData
+                                    channelObj.let { newAdmin ->
+                                        channelList.firstOrNull { channel ->
+                                            channel.channel_id == newAdmin.channel_id
+                                        }?.participants?.firstOrNull { user ->
+                                            user.user_id == newAdmin.new_admin
+                                        }?.admin = true
+                                        eventListener.onAdminAdded?.invoke(
+                                            newAdmin
+                                        )
+                                    }
+                                }
+                            }
+
+                            "ROOM_ADMIN_REMOVED" -> {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    intent.getSerializableExtra(
+                                        "channel_obj", AdminRemoveModelData::class.java
+                                    )?.let { removedAdmin ->
+                                        channelList.firstOrNull { channel ->
+                                            channel.channel_id == removedAdmin.channel_id
+                                        }?.participants?.firstOrNull { user ->
+                                            user.user_id == removedAdmin.admin_removed
+                                        }?.admin = false
+                                        eventListener.onAdminRemoved?.invoke(
+                                            removedAdmin
+                                        )
+                                    }
+                                } else {
+                                    val channelObj = intent.getSerializableExtra(
+                                        "channel_obj"
+                                    ) as AdminRemoveModelData
+                                    channelObj.let { removedAdmin ->
+                                        channelList.firstOrNull { channel ->
+                                            channel.channel_id == removedAdmin.channel_id
+                                        }?.participants?.firstOrNull { user ->
+                                            user.user_id == removedAdmin.admin_removed
+                                        }?.admin = false
+                                        eventListener.onAdminRemoved?.invoke(
+                                            removedAdmin
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
 
                 try {
                     applicationContext.unregisterReceiver(broadcastReceiver)
-                }catch (e : Exception){
+                } catch (e: Exception) {
                     e.printStackTrace()
                 }
 
@@ -645,8 +1240,11 @@ object Talker {
                         "com.talker.sdk"
                     ), Context.RECEIVER_EXPORTED
                 )
-            }else{
-                SocketHandler.setSocket(sharedPreference.getUserData().user_auth_token, applicationContext)
+            } else {
+                SocketHandler.setSocket(
+                    sharedPreference.getUserData().user_auth_token,
+                    applicationContext
+                )
                 SocketHandler.establishConnection(applicationContext)
             }
             sdkCredAPI(
@@ -1068,7 +1666,7 @@ object Talker {
     private fun sendBroadCast(
         action: String = "",
         message: String = "",
-        failureFrom : String? = null
+        failureFrom: String? = null
     ) {
         applicationContext?.sendBroadcast(
             Intent()

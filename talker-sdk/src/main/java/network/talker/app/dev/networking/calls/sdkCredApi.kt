@@ -27,9 +27,9 @@ internal fun sdkCredAPI(
                 if (response.isSuccessful && response.body() != null && response.code() == 200){
                     val data = response.body()
                     if (data != null) {
-//                        withContext(Dispatchers.IO){
+                        withContext(Dispatchers.Main){
                             onSuccess(data)
-//                        }
+                        }
                     }
                 }else{
                     withContext(Dispatchers.Main){

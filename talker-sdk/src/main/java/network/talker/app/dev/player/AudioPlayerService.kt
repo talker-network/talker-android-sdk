@@ -152,9 +152,10 @@ class AudioPlayerService : Service() {
             .setWhen(System.currentTimeMillis())
             .setShowWhen(true)
             .setAutoCancel(false)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
         startForeground(Random.nextInt(from = 2, until = Int.MAX_VALUE), notification)
-        return START_STICKY
+        return START_REDELIVER_INTENT
     }
 
     override fun onDestroy() {
