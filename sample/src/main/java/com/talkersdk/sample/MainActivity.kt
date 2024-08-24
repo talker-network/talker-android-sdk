@@ -1,6 +1,8 @@
 package com.talkersdk.sample
 
 import android.Manifest
+import android.app.NotificationManager
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -27,6 +29,8 @@ class MainActivity : ComponentActivity() {
         // also don't forget to check for required permissions and
         // also set the services as mentioned in the menifest file of the sample app
         Talker.init(Constants.SDK_KEY)
+
+
         setContent {
 
             var fcmToken by remember {

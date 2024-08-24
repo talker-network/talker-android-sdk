@@ -78,6 +78,7 @@ class AudioPlayerService : Service() {
         }
 
         currentLiveMessage?.let {
+//            https://talker-dev.s3.us-east-2.amazonaws.com/9cd12929-ebec-4140-9d0b-39371668ce6c.m3u8
             val notificationManager = getSystemService(NotificationManager::class.java)
             player = ExoPlayer.Builder(this@AudioPlayerService).build()
             player?.addListener(object : Player.Listener {

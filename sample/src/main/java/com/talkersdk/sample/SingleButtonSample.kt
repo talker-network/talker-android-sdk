@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -38,8 +40,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -55,7 +57,6 @@ import androidx.compose.ui.window.DialogProperties
 import network.talker.app.dev.Talker
 import network.talker.app.dev.networking.data.Channel
 import network.talker.app.dev.networking.data.GetAllUserModelData
-import network.talker.app.dev.networking.data.Participant
 import network.talker.app.dev.webrtc.AudioStatus
 import network.talker.app.dev.webrtc.ServerConnectionState
 
@@ -117,6 +118,11 @@ fun SingleButtonSample(fcmToken: String) {
     var showEditChannelDialog by remember {
         mutableStateOf(false)
     }
+
+    // storing list of channels
+    val channels by Talker.getChannelList().collectAsState(initial = emptyList())
+    // list of all users available in the sdk
+    val users by Talker.getAllUsers().collectAsState(initial = emptyList())
 
 
     // show loader if some process is executing..
@@ -200,7 +206,7 @@ fun SingleButtonSample(fcmToken: String) {
                                 // start showing loader
                                 isLoading = true
                                 // create user and connect to peer and pass the listener and fcm token
-                                Talker.sdkSetUser(
+                                Talker.setUser(
                                     context,
                                     userName,
                                     fcmToken,
@@ -239,94 +245,30 @@ fun SingleButtonSample(fcmToken: String) {
                     }
                     // will store the current channel
                     var selectedChannel by rememberSaveable {
-                        mutableStateOf(Channel())
-                    }
-                    // storing list of channels
-                    var channels by remember {
-                        mutableStateOf(emptyList<Channel>())
-                    }
-                    // list of all users available in the sdk
-                    val users = remember {
-                        mutableStateListOf<GetAllUserModelData>()
+                        mutableStateOf(channels.getOrNull(0) ?: Channel())
                     }
                     // current user
                     var selectedUser by remember {
                         mutableStateOf<GetAllUserModelData?>(null)
                     }
 
-                    // when we create a new channel or some other person adds us to their channel
-                    Talker.eventListener.onNewChannel = { channel ->
-                        // simply get the updated channel's list from Talker instance and update it in your ui.
-                        Talker.getChannelList { list ->
-                            channels = list
+                    Talker.eventListener.onChannelUpdated = { updatedChannel ->
+                        if (selectedChannel.channel_id == updatedChannel.channel_id) {
+                            selectedChannel = selectedChannel.copy(
+                                group_name = updatedChannel.new_name
+                            )
                         }
                     }
 
-                    // when channel name gets updated..
-                    Talker.eventListener.onChannelUpdated = { updatedChannel ->
-                        Talker.getChannelList { list ->
-                            // update channel list with latest from Talker Instance
-                            channels = list
-                            list.firstOrNull { it.channel_id == selectedChannel.channel_id }?.let {
-                                // update selectedChannel so that it is also updated if it's name has only been changed.
-                                selectedChannel = it
-                            }
-                        }
-                    }
+
                     // when you are removed from channel or any other person is removed from channel.
                     Talker.eventListener.onRemovedUserFromChannel = { removedUser ->
-                        // update with latest list..
-                        Talker.getChannelList { list ->
-                            channels = list
-                            // update if the the selected channel is only removed.
-                            list.firstOrNull { it.channel_id == selectedChannel.channel_id }?.let {
-                                selectedChannel = it
-                            }
+                        // if the user that is removed is nothing but me than
+                        // close the edit channel dialog.
+                        if (removedUser.removed_participant == Talker.getCurrentUserId(context)) {
+                            showEditChannelDialog = false
+                            selectedChannel = channels[0]
                         }
-                    }
-
-                    // if some user has been added in channel
-                    Talker.eventListener.onAddedUserInChannel = { addedUser ->
-                        Talker.getChannelList { list ->
-                            channels = list
-                        }
-                    }
-
-                    // when a new user gets created by someone...
-                    Talker.eventListener.onNewSdkUser = { newSdkUser ->
-                        Talker.getAllUsers {
-                            users.clear()
-                            users.apply {
-                                addAll(it)
-                                sortBy { it.name }
-                            }
-                        }
-                    }
-
-
-                    // on the first time
-                    // fetch all the channel's list and by default keep the first one selected
-                    LaunchedEffect(key1 = Unit) {
-                        Talker.getChannelList(
-                            onChannelFetched = {
-                                channels = it
-                                selectedChannel = channels.getOrNull(0) ?: Channel()
-                            }
-                        )
-                    }
-
-                    // on the first time
-                    // fetch all the users available in the app
-                    LaunchedEffect(key1 = Unit) {
-                        Talker.getAllUsers(
-                            onUsersFetched = {
-                                users.clear()
-                                users.apply {
-                                    addAll(it)
-                                    sortBy { it.name }
-                                }
-                            }
-                        )
                     }
 
 
@@ -416,14 +358,12 @@ fun SingleButtonSample(fcmToken: String) {
                         }
                     }
                     Spacer(modifier = Modifier.height(50.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(15.dp),
-                        modifier = Modifier.horizontalScroll(rememberScrollState())
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(15.dp)
                     ) {
-                        users.filter { user ->
-                            // so that we don't show our own user in the list
-                            user.user_id != Talker.getCurrentUserId(context)
-                        }.forEach {
+                        items(
+                            users
+                        ) {
                             Button(onClick = {
                                 selectedUser = if (selectedUser == it) {
                                     null
@@ -539,105 +479,6 @@ fun SingleButtonSample(fcmToken: String) {
 
                     // edit the channel info dialog
                     if (showEditChannelDialog) {
-                        // channel users which are already their in the channel participants list.
-                        val channelUsers = remember {
-                            mutableStateListOf<Participant>().apply {
-                                addAll(selectedChannel.participants)
-                            }
-                        }
-                        // other users which are not their in the channel participant's list
-                        val remainingUsers = remember {
-                            mutableStateListOf<GetAllUserModelData>().apply {
-                                addAll(
-                                    // take only those users from user's list
-                                    // that are not in the selected channel's participant's list
-                                    users.filter { user ->
-                                        selectedChannel.participants.none { participant ->
-                                            participant.user_id == user.user_id
-                                        }
-                                    }
-                                )
-                            }
-                        }
-
-
-                        // when new admin is added update the ui
-                        Talker.eventListener.onAdminAdded = { adminAdded ->
-                            channelUsers.clear()
-                            Talker.getChannelList { list ->
-                                list.firstOrNull { channel ->
-                                    channel.channel_id == adminAdded.channel_id
-                                }?.let { channel ->
-                                    channelUsers.addAll(channel.participants)
-                                }
-                            }
-                        }
-
-                        // when admin is removed update the ui
-                        Talker.eventListener.onAdminRemoved = { removedAdmin ->
-                            channelUsers.clear()
-                            Talker.getChannelList { list ->
-                                list.firstOrNull { channel ->
-                                    channel.channel_id == removedAdmin.channel_id
-                                }?.let { channel ->
-                                    channelUsers.addAll(channel.participants)
-                                }
-                            }
-                        }
-
-                        // some user is removed from the channel
-                        // update the ui with both participants and
-                        // also add that user into the add participants list.
-                        Talker.eventListener.onRemovedUserFromChannel = { removedUser ->
-                            channelUsers.clear()
-                            remainingUsers.clear()
-                            Talker.getChannelList { list ->
-                                list.firstOrNull { channel ->
-                                    channel.channel_id == removedUser.channel_id
-                                }?.let { channel ->
-                                    channelUsers.addAll(channel.participants)
-                                }
-                            }
-                            Talker.getAllUsers { users ->
-                                remainingUsers.addAll(users)
-                            }
-
-                            // if the user that is removed is nothing but me than
-                            // close the edit channel dialog.
-                            if (removedUser.removed_participant == Talker.getCurrentUserId(context)){
-                                showEditChannelDialog = false
-                            }
-                        }
-
-
-                        // doing the opposite of remove user from the channel delegate
-                        Talker.eventListener.onAddedUserInChannel = { addedUser ->
-                            channelUsers.clear()
-                            remainingUsers.clear()
-                            Talker.getChannelList { list ->
-                                list.firstOrNull { channel ->
-                                    channel.channel_id == addedUser.channel_id
-                                }?.let { channel ->
-                                    channelUsers.addAll(channel.participants)
-                                }
-                            }
-                            Talker.getAllUsers { users ->
-                                remainingUsers.addAll(users)
-                            }
-                        }
-
-                        // when some user is created and add that user to the available to add participants list.
-                        Talker.eventListener.onNewSdkUser = { newSdkUser ->
-                            Toast.makeText(context, "New user found", Toast.LENGTH_SHORT).show()
-                            remainingUsers.clear()
-                            Talker.getAllUsers { users ->
-                                remainingUsers.apply {
-                                    addAll(
-                                        users
-                                    )
-                                }
-                            }
-                        }
 
                         BasicAlertDialog(
                             onDismissRequest = { showEditChannelDialog = false },
@@ -680,111 +521,115 @@ fun SingleButtonSample(fcmToken: String) {
                                     ),
                                     modifier = Modifier.horizontalScroll(rememberScrollState())
                                 ) {
-                                    channelUsers.sortedBy { it.name }.forEach { user ->
-                                        AssistChip(
-                                            onClick = {
-                                                // you cannot change your own admin rights
-                                                if (user.user_id != Talker.getCurrentUserId(context)) {
-                                                    // whether they are allow or not
-                                                    // to do this
-                                                    // is handled by backend.
-                                                    // they will return failure if not allowed.
-                                                    // kindly check log cat for more details.
-                                                    if (user.admin) {
-                                                        // if the user is admin then remove them from admin
-                                                        Talker.removeAdmin(
-                                                            context,
-                                                            selectedChannel.channel_id,
-                                                            user.user_id,
-                                                            onSuccess = {
-
-                                                            },
-                                                            onFailure = {
-                                                                Toast.makeText(
-                                                                    context,
-                                                                    "Failed",
-                                                                    Toast.LENGTH_SHORT
-                                                                ).show()
-                                                            }
-                                                        )
-                                                    }else{
-                                                        // else make them the admin
-                                                        Talker.addAdmin(
-                                                            context,
-                                                            selectedChannel.channel_id,
-                                                            user.user_id,
-                                                            onSuccess = {
-
-                                                            },
-                                                            onFailure = {
-                                                                Toast.makeText(
-                                                                    context,
-                                                                    "Failed",
-                                                                    Toast.LENGTH_SHORT
-                                                                ).show()
-                                                            }
-                                                        )
-                                                    }
-                                                }
-                                            },
-                                            label = {
-                                                Text(
-                                                    text = user.name,
-                                                    modifier = Modifier.padding(
-                                                        top = 12.dp
-                                                    ),
-                                                    color = if (user.admin) Color.Green else Color.Black,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            },
-                                            trailingIcon = {
-                                                IconButton(onClick = {
-                                                    // you cannot remove yourself
-                                                    if (user.user_id == Talker.getCurrentUserId(
+                                    channels.first { it.channel_id == selectedChannel.channel_id }.participants.sortedBy { it.name }
+                                        .forEach { user ->
+                                            AssistChip(
+                                                onClick = {
+                                                    // you cannot change your own admin rights
+                                                    if (user.user_id != Talker.getCurrentUserId(
                                                             context
                                                         )
                                                     ) {
-                                                        Toast.makeText(
-                                                            context,
-                                                            "You cannot remove yourself",
-                                                            Toast.LENGTH_SHORT
-                                                        )
-                                                            .show()
-                                                    } else {
-                                                        // else remove the participant
-                                                        Talker.removeParticipant(
-                                                            context,
-                                                            // which participant we want to remove
-                                                            removingParticipant = user.user_id,
-                                                            // from which channel we want to remove them
-                                                            // they are removed, the particular delegate will be called and then you can update the ui accordingly
-                                                            selectedChannel.channel_id,
-                                                            onSuccess = {
-                                                                Toast.makeText(
-                                                                    context,
-                                                                    "Removed participant",
-                                                                    Toast.LENGTH_SHORT
-                                                                ).show()
-                                                            },
-                                                            onFailure = {
-                                                                Toast.makeText(
-                                                                    context,
-                                                                    "Failed",
-                                                                    Toast.LENGTH_SHORT
-                                                                ).show()
-                                                            }
+                                                        // whether they are allow or not
+                                                        // to do this
+                                                        // is handled by backend.
+                                                        // they will return failure if not allowed.
+                                                        // kindly check log cat for more details.
+                                                        if (user.admin) {
+                                                            // if the user is admin then remove them from admin
+                                                            Talker.removeAdmin(
+                                                                context,
+                                                                selectedChannel.channel_id,
+                                                                user.user_id,
+                                                                onSuccess = {
+
+                                                                },
+                                                                onFailure = {
+                                                                    Toast.makeText(
+                                                                        context,
+                                                                        "Failed",
+                                                                        Toast.LENGTH_SHORT
+                                                                    ).show()
+                                                                }
+                                                            )
+                                                        } else {
+                                                            // else make them the admin
+                                                            Talker.addAdmin(
+                                                                context,
+                                                                selectedChannel.channel_id,
+                                                                user.user_id,
+                                                                onSuccess = {
+
+                                                                },
+                                                                onFailure = {
+                                                                    Toast.makeText(
+                                                                        context,
+                                                                        "Failed",
+                                                                        Toast.LENGTH_SHORT
+                                                                    ).show()
+                                                                }
+                                                            )
+                                                        }
+                                                    }
+                                                },
+                                                label = {
+                                                    Text(
+                                                        text = user.name,
+                                                        modifier = Modifier.padding(
+                                                            top = 12.dp
+                                                        ),
+                                                        color = if (user.admin) Color.Green else Color.Black,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                },
+                                                trailingIcon = {
+                                                    IconButton(onClick = {
+                                                        // you cannot remove yourself
+                                                        if (user.user_id == Talker.getCurrentUserId(
+                                                                context
+                                                            )
+                                                        ) {
+                                                            Toast.makeText(
+                                                                context,
+                                                                "You cannot remove yourself",
+                                                                Toast.LENGTH_SHORT
+                                                            )
+                                                                .show()
+                                                        } else {
+                                                            // else remove the participant
+                                                            Talker.removeParticipant(
+                                                                context,
+                                                                // which participant we want to remove
+                                                                removingParticipant = user.user_id,
+                                                                // from which channel we want to remove them
+                                                                // they are removed, the particular delegate will be called and then you can update the ui accordingly
+                                                                selectedChannel.channel_id,
+                                                                onSuccess = {
+                                                                    Toast.makeText(
+                                                                        context,
+                                                                        "Removed participant",
+                                                                        Toast.LENGTH_SHORT
+                                                                    ).show()
+                                                                },
+                                                                onFailure = {
+                                                                    Toast.makeText(
+                                                                        context,
+                                                                        "Failed",
+                                                                        Toast.LENGTH_SHORT
+                                                                    ).show()
+                                                                }
+                                                            )
+                                                        }
+                                                    }) {
+                                                        Image(
+                                                            imageVector = Icons.Default.Clear,
+                                                            contentDescription = null
                                                         )
                                                     }
-                                                }) {
-                                                    Image(
-                                                        imageVector = Icons.Default.Clear,
-                                                        contentDescription = null
-                                                    )
                                                 }
-                                            }
-                                        )
-                                    }
+                                            )
+                                        }
                                 }
                                 Spacer(modifier = Modifier.height(26.dp))
                                 Text(
@@ -798,8 +643,8 @@ fun SingleButtonSample(fcmToken: String) {
                                     modifier = Modifier.horizontalScroll(rememberScrollState())
                                 ) {
                                     // only show remaining user
-                                    remainingUsers.filter { user ->
-                                        selectedChannel.participants.none { part ->
+                                    users.filter { user ->
+                                        channels.first { it.channel_id == selectedChannel.channel_id }.participants.none { part ->
                                             part.user_id == user.user_id
                                         }
                                     }.sortedBy { it.name }.forEach { user ->

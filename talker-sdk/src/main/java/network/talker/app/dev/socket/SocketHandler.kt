@@ -12,6 +12,7 @@ import io.socket.client.Ack
 import io.socket.client.IO
 import io.socket.client.Manager
 import io.socket.client.Socket
+import io.socket.emitter.Emitter
 import network.talker.app.dev.LOG_TAG
 import network.talker.app.dev.Talker
 import network.talker.app.dev.TalkerGlobalVariables
@@ -27,6 +28,7 @@ import org.json.JSONObject
 import java.net.URI
 import java.net.URISyntaxException
 
+
 internal object SocketHandler {
     private var socket: Socket? = null
     fun setSocket(auth: String, context: Context) {
@@ -39,7 +41,7 @@ internal object SocketHandler {
                             "Authorization" to listOf(auth)
                         )
                         forceNew = true
-                        reconnection = false
+                        reconnection = true
                         transports = arrayOf("websocket")
 
                     }
@@ -97,6 +99,10 @@ internal object SocketHandler {
             )
             Log.d(LOG_TAG, "Socket EVENT_CONNECT_ERROR")
         }
+
+//        socket!!.on("event_name") { // Acknowledge the event
+//            socket!!.ack("event_name", "ack_data")
+//        }
         socket?.on(
             "broadcast_start"
         ) { args ->
@@ -143,6 +149,16 @@ internal object SocketHandler {
                             Log.d(LOG_TAG, "Socket broadcast_start channel object : $arg")
                         }
                     }
+                }else{
+                    if (arg is Ack) {
+                        arg.call()
+                        if (TalkerGlobalVariables.printLogs) {
+                            Log.d(
+                                LOG_TAG,
+                                "Sending acknowledgment back... broadcast_start"
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -162,6 +178,16 @@ internal object SocketHandler {
                             Log.d(
                                 LOG_TAG,
                                 "Socket broadcast_end error : ${e.message}"
+                            )
+                        }
+                    }
+                }else{
+                    if (arg is Ack) {
+                        arg.call()
+                        if (TalkerGlobalVariables.printLogs) {
+                            Log.d(
+                                LOG_TAG,
+                                "Sending acknowledgment back... broadcast_end"
                             )
                         }
                     }
@@ -205,6 +231,16 @@ internal object SocketHandler {
                             )
                         }
                     }
+                }else{
+                    if (arg is Ack) {
+                        arg.call()
+                        if (TalkerGlobalVariables.printLogs) {
+                            Log.d(
+                                LOG_TAG,
+                                "Sending acknowledgment back... new_channel"
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -233,11 +269,22 @@ internal object SocketHandler {
                                         )
                                     }
                             )
+
                         } catch (e: Exception) {
                             e.printStackTrace()
                             Log.d(
                                 LOG_TAG,
                                 "Socket room_name_update error : ${e.message}"
+                            )
+                        }
+                    }
+                } else{
+                    if (arg is Ack) {
+                        arg.call()
+                        if (TalkerGlobalVariables.printLogs) {
+                            Log.d(
+                                LOG_TAG,
+                                "Sending acknowledgment back... room_name_update"
                             )
                         }
                     }
@@ -277,6 +324,16 @@ internal object SocketHandler {
                             )
                         }
                     }
+                } else{
+                    if (arg is Ack) {
+                        arg.call()
+                        if (TalkerGlobalVariables.printLogs) {
+                            Log.d(
+                                LOG_TAG,
+                                "Sending acknowledgment back... room_participant_removed"
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -310,6 +367,16 @@ internal object SocketHandler {
                             Log.d(
                                 LOG_TAG,
                                 "Socket room_participant_added error : ${e.message}"
+                            )
+                        }
+                    }
+                } else{
+                    if (arg is Ack) {
+                        arg.call()
+                        if (TalkerGlobalVariables.printLogs) {
+                            Log.d(
+                                LOG_TAG,
+                                "Sending acknowledgment back... room_participant_added"
                             )
                         }
                     }
@@ -349,6 +416,16 @@ internal object SocketHandler {
                             )
                         }
                     }
+                } else{
+                    if (arg is Ack) {
+                        arg.call()
+                        if (TalkerGlobalVariables.printLogs) {
+                            Log.d(
+                                LOG_TAG,
+                                "Sending acknowledgment back... new_sdk_user"
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -385,6 +462,16 @@ internal object SocketHandler {
                             )
                         }
                     }
+                } else{
+                    if (arg is Ack) {
+                        arg.call()
+                        if (TalkerGlobalVariables.printLogs) {
+                            Log.d(
+                                LOG_TAG,
+                                "Sending acknowledgment back... room_admin_added"
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -418,6 +505,16 @@ internal object SocketHandler {
                             Log.d(
                                 LOG_TAG,
                                 "Socket room_admin_removed error : ${e.message}"
+                            )
+                        }
+                    }
+                }else{
+                    if (arg is Ack) {
+                        arg.call()
+                        if (TalkerGlobalVariables.printLogs) {
+                            Log.d(
+                                LOG_TAG,
+                                "Sending acknowledgment back... room_admin_removed"
                             )
                         }
                     }

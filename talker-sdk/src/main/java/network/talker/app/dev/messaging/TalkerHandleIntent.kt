@@ -56,7 +56,7 @@ fun handleIntent(intent: Intent?, context: Context) {
 
             Log.d(
                 "onMessageReceived : ",
-                intent.extras?.getString("data").toString()
+                intent.extras!!.keySet().toList().toString()
             )
             // Handle the received message
             val notificationTitle = "Audio message"

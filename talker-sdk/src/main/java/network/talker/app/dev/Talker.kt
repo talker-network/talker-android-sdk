@@ -30,6 +30,7 @@ import com.amazonaws.services.kinesisvideo.model.ResourceEndpointListItem
 import com.amazonaws.services.kinesisvideosignaling.model.IceServer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import network.talker.app.dev.model.Event
 import network.talker.app.dev.model.Message
@@ -134,8 +135,6 @@ object Talker {
     private var retryCount = 0
     private var hasToRetry = false
     private var isFirstTime = true
-    private var channelList: List<Channel> = emptyList()
-    private var userList: List<GetAllUserModelData> = emptyList()
 
     class EventListeners {
         var onServerConnectionChange: ((serverConnectionState: ServerConnectionState, message: String) -> Unit)? =
@@ -171,27 +170,26 @@ object Talker {
         context: Context,
         name: String,
         fcmToken: String,
-//        eventListener: EventListener,
         onSuccess: (message: String) -> Unit = {},
         onFailure: (message: String) -> Unit = {},
         channelName: String = "",
         region: String = "",
     ) {
-        Talker.applicationContext = context
+        applicationContext = context
         validateSDKKey()
         hasStartedTalking = false
         retryCount = 0
         hasToRetry = false
         isFirstTime = true
         val sharedPreference = SharedPreference(context)
-        CoroutineScope(Dispatchers.IO).launch {
-            getChannelList()
-        }
-        CoroutineScope(Dispatchers.IO).launch {
-            getAllUsers()
-        }
+        getAllUsersInternal(
+            onFailure
+        )
         sdkCreateUser(context, name = name, onSuccess = { res ->
             sharedPreference.setUserData(res.data)
+            getChannelListInternal(
+                onFailure
+            )
             TalkerSDKApplication().auth.signIn(res.data.a_username,
                 res.data.a_pass,
                 emptyMap(),
@@ -203,17 +201,12 @@ object Talker {
                 object : Callback<SignInResult> {
                     override fun onResult(result: SignInResult?) {
                         getMainLooper {
-//                            eventListener.onRegistrationStateChange(
-//                                RegistrationState.Success,
-//                                "User register success"
-//                            )
                             onSuccess("User register success")
                         }
                         establishConnection(
                             context,
                             channelName,
                             region,
-//                            eventListener
                         )
                     }
 
@@ -249,31 +242,27 @@ object Talker {
         )
     }
 
-    fun sdkSetUser(
+    fun setUser(
         context: Context,
         userName: String,
         fcmToken: String,
-//        eventListener: EventListener,
         onSuccess: (message: String) -> Unit = {},
         onFailure: (message: String) -> Unit = {},
         channelName: String = "",
         region: String = "",
     ) {
-        Talker.applicationContext = context
+        applicationContext = context
         validateSDKKey()
         if (userName.isEmpty()) {
-//            eventListener.onRegistrationStateChange(
-//                RegistrationState.Failure,
-//                "Username cannot be empty"
-//            )
             onFailure("Username cannot be empty")
             return
         }
-        CoroutineScope(Dispatchers.IO).launch {
-            getChannelList()
-        }
-        CoroutineScope(Dispatchers.IO).launch {
-            getAllUsers()
+        if (getCurrentUserId(context) != userName) {
+            CoroutineScope(Dispatchers.Main).launch {
+                TalkerSDKApplication.database.roomDao().clearUsers()
+                TalkerSDKApplication.database.roomDao().clearChannels()
+                getAllUsersInternal(onFailure)
+            }
         }
 
         sdkSetUser(
@@ -281,6 +270,12 @@ object Talker {
             this.sdkKey,
             userName,
             onSuccess = { res ->
+                if (res.data.user_id != getCurrentUserId(context)) {
+                    SharedPreference(context).setUserData(res.data)
+                    getChannelListInternal(onFailure)
+                }else{
+                    SharedPreference(context).setUserData(res.data)
+                }
                 TalkerSDKApplication().auth.signIn(res.data.a_username,
                     res.data.a_pass,
                     emptyMap(),
@@ -341,81 +336,68 @@ object Talker {
         )
     }
 
-    fun getChannelList(onChannelFetched: (List<Channel>) -> Unit = {}) {
+    fun getChannelList(): kotlinx.coroutines.flow.Flow<List<Channel>> =
+        TalkerSDKApplication.database.roomDao().getAllChannels()
+
+    fun getAllUsers(): kotlinx.coroutines.flow.Flow<List<GetAllUserModelData>> =
+        TalkerSDKApplication.database.roomDao().getAllUsersExcept(
+            SharedPreference(TalkerSDKApplication.talkerApplicationContext).getUserData().user_id
+        )
+
+//    fun channelsParticipants(channelId: String): kotlinx.coroutines.flow.Flow<List<Participant>> =
+//        TalkerSDKApplication
+//            .database.roomDao().getParticipantsByChannelId(channelId)
+
+
+    private fun getChannelListInternal(
+        onFailure: (message: String) -> Unit
+    ) {
         validateSDKKey()
-        if (!isUserLoggedIn()) {
-            Log.d(
-                LOG_TAG,
-                "Kindly create or login first"
-            )
-            return
-        }
-        if (channelList.isEmpty()) {
-            applicationContext?.let {
-                sdkGetAllChannels(
-                    it,
-                    SharedPreference(applicationContext!!).getUserData().user_auth_token,
-                    onSuccess = {
-                        runOnUiThread {
-                            channelList = it.data.channels
-                            onChannelFetched(it.data.channels)
-                        }
-                    },
-                    onError = {
-                        runOnUiThread {
-                            onChannelFetched(emptyList())
-                        }
-                    },
-                    onInternetNotAvailable = {
-                        runOnUiThread {
-                            onChannelFetched(emptyList())
-                        }
+        applicationContext?.let {
+            sdkGetAllChannels(
+                it,
+                SharedPreference(applicationContext!!).getUserData().user_auth_token,
+                onSuccess = {
+                    CoroutineScope(Dispatchers.Main).launch {
+                        TalkerSDKApplication.database.roomDao().insertChannels(it.data.channels)
                     }
-                )
-            }
-        } else {
-            runOnUiThread {
-                onChannelFetched(channelList)
-            }
+                },
+                onError = {
+                    runOnUiThread {
+                        onFailure("Failed fetching channels")
+                    }
+                },
+                onInternetNotAvailable = {
+                    runOnUiThread {
+                        onFailure("Failure due to no internet connectivity")
+                    }
+                }
+            )
         }
     }
 
-    fun getAllUsers(onUsersFetched: (List<GetAllUserModelData>) -> Unit = {}) {
+    private fun getAllUsersInternal(onFailure: (message: String) -> Unit) {
         validateSDKKey()
-        if (!isUserLoggedIn()) {
-            Log.d(
-                LOG_TAG,
-                "Kindly create or login first"
-            )
-            return
-        }
-        if (channelList.isEmpty()) {
-            applicationContext?.let {
-                sdkGetAllUsersApi(
-                    it,
-                    sdkKey,
-                    onSuccess = {
-                        runOnUiThread {
-                            userList = it.data
-                            onUsersFetched(it.data.sortedBy { it.name })
-                        }
-                    },
-                    onError = {
-                        runOnUiThread {
-                            onUsersFetched(emptyList())
-                        }
-                    },
-                    onInternetNotAvailable = {
-                        runOnUiThread {
-                            onUsersFetched(emptyList())
-                        }
+        applicationContext?.let {
+            sdkGetAllUsersApi(
+                it,
+                sdkKey,
+                onSuccess = {
+                    CoroutineScope(Dispatchers.Main).launch {
+                        TalkerSDKApplication.database.roomDao().insertUsers(it.data)
                     }
-                )
-            }
-        } else {
-            runOnUiThread {
-                onUsersFetched(userList)
-            }
+                },
+                onError = {
+                    runOnUiThread {
+                        onFailure("Failed featching users list")
+                    }
+                },
+                onInternetNotAvailable = {
+                    runOnUiThread {
+                        onFailure("Failure due to no internet connectivity")
+                    }
+                }
+            )
         }
     }
 
@@ -434,10 +416,16 @@ object Talker {
             new_name,
             onSuccess = {
                 if (it.success) {
-                    channelList.find { channel ->
-                        channel.channel_id == channelId
-                    }?.group_name = new_name
-                    onSuccess(it.data.new_name)
+                    CoroutineScope(Dispatchers.Main).launch {
+                        val channel =
+                            TalkerSDKApplication.database.roomDao().getChannelById(channelId)
+                        val updatedChannel =
+                            channel.firstOrNull()?.copy(group_name = it.data.new_name)
+                        if (updatedChannel != null) {
+                            TalkerSDKApplication.database.roomDao().updateChannel(updatedChannel)
+                        }
+                        onSuccess(it.data.new_name)
+                    }
                 } else {
                     onFailure()
                 }
@@ -448,7 +436,6 @@ object Talker {
             onInternetNotAvailable = {
                 onFailure()
             }
-
         )
     }
 
@@ -998,14 +985,11 @@ object Talker {
                                         intent.getSerializableExtra(
                                             "channel_obj", Channel::class.java
                                         )?.let {
-                                            if (channelList.none { channel -> channel.channel_id == it.channel_id }) {
-                                                Log.d(
-                                                    LOG_TAG,
-                                                    "new_channel : $it"
-                                                )
-                                                channelList = channelList.toMutableList().apply {
-                                                    add(it)
-                                                }
+                                            CoroutineScope(Dispatchers.Main).launch {
+                                                TalkerSDKApplication.database.roomDao()
+                                                    .insertChannels(
+                                                        listOf(it)
+                                                    )
                                                 eventListener.onNewChannel?.invoke(
                                                     it
                                                 )
@@ -1015,14 +999,10 @@ object Talker {
                                         val channelObj = intent.getSerializableExtra(
                                             "channel_obj"
                                         ) as Channel
-                                        if (channelList.none { channel -> channel.channel_id == channelObj.channel_id }) {
-                                            Log.d(
-                                                LOG_TAG,
-                                                "new_channel : $channelObj"
+                                        CoroutineScope(Dispatchers.Main).launch {
+                                            TalkerSDKApplication.database.roomDao().insertChannels(
+                                                listOf(channelObj)
                                             )
-                                            channelList = channelList.toMutableList().apply {
-                                                add(channelObj)
-                                            }
                                             eventListener.onNewChannel?.invoke(
                                                 channelObj
                                             )
@@ -1038,23 +1018,36 @@ object Talker {
                                     intent.getSerializableExtra(
                                         "channel_obj", UpdateChannelNameModelData::class.java
                                     )?.let {
-                                        channelList.find { channel ->
-                                            channel.channel_id == it.channel_id
-                                        }?.group_name = it.new_name
-                                        eventListener.onChannelUpdated?.invoke(
-                                            it
-                                        )
+                                        CoroutineScope(Dispatchers.Main).launch {
+                                            val channel = TalkerSDKApplication.database.roomDao()
+                                                .getChannelById(it.channel_id)
+                                            val updatedChannel = channel.firstOrNull()
+                                                ?.copy(group_name = it.new_name)
+                                            if (updatedChannel != null) {
+                                                TalkerSDKApplication.database.roomDao()
+                                                    .updateChannel(updatedChannel)
+                                            }
+
+                                            eventListener.onChannelUpdated?.invoke(
+                                                it
+                                            )
+                                        }
                                     }
                                 } else {
                                     val channelObj = intent.getSerializableExtra(
                                         "channel_obj"
                                     ) as UpdateChannelNameModelData
-                                    channelObj.let {
-                                        channelList.find { channel ->
-                                            channel.channel_id == it.channel_id
-                                        }?.group_name = it.new_name
+                                    CoroutineScope(Dispatchers.Main).launch {
+                                        val channel = TalkerSDKApplication.database.roomDao()
+                                            .getChannelById(channelObj.channel_id)
+                                        val updatedChannel = channel.firstOrNull()
+                                            ?.copy(group_name = channelObj.new_name)
+                                        if (updatedChannel != null) {
+                                            TalkerSDKApplication.database.roomDao()
+                                                .updateChannel(updatedChannel)
+                                        }
                                         eventListener.onChannelUpdated?.invoke(
-                                            it
+                                            channelObj
                                         )
                                     }
                                 }
@@ -1066,36 +1059,70 @@ object Talker {
                                     intent.getSerializableExtra(
                                         "channel_obj", RemoveParticipantModelData::class.java
                                     )?.let { removedUser ->
-                                        channelList.find { channel ->
-                                            channel.channel_id == removedUser.channel_id
-                                        }?.participants?.filter { user ->
-                                            user.user_id != removedUser.removed_participant
-                                        }?.let {
-                                            channelList.find { channel ->
-                                                channel.channel_id == removedUser.channel_id
-                                            }?.participants = it
+//                                        channelList.find { channel ->
+//                                            channel.channel_id == removedUser.channel_id
+//                                        }?.participants?.filter { user ->
+//                                            user.user_id != removedUser.removed_participant
+//                                        }?.let {
+//                                            channelList.find { channel ->
+//                                                channel.channel_id == removedUser.channel_id
+//                                            }?.participants = it
+//                                        }
+
+                                        CoroutineScope(Dispatchers.Main).launch {
+                                            val channel = TalkerSDKApplication.database.roomDao()
+                                                .getChannelById(removedUser.channel_id)
+                                                .firstOrNull()
+                                            channel?.let {
+                                                val updatedParticipants =
+                                                    it.participants.filter { it.user_id != removedUser.removed_participant }
+                                                val updatedChannel =
+                                                    it.copy(participants = updatedParticipants)
+                                                TalkerSDKApplication.database.roomDao()
+                                                    .updateChannel(updatedChannel)
+                                            }
+
+                                            if (removedUser.removed_participant == SharedPreference(
+                                                    applicationContext
+                                                ).getUserData().user_id
+                                            ) {
+                                                TalkerSDKApplication.database.roomDao()
+                                                    .deleteChannel(removedUser.channel_id)
+                                            }
+                                            eventListener.onRemovedUserFromChannel?.invoke(
+                                                removedUser
+                                            )
                                         }
-                                        eventListener.onRemovedUserFromChannel?.invoke(
-                                            removedUser
-                                        )
                                     }
                                 } else {
                                     val channelObj = intent.getSerializableExtra(
                                         "channel_obj"
                                     ) as RemoveParticipantModelData
                                     channelObj.let { removedUser ->
-                                        channelList.find { channel ->
-                                            channel.channel_id == removedUser.channel_id
-                                        }?.participants?.filter { user ->
-                                            user.user_id != removedUser.removed_participant
-                                        }?.let {
-                                            channelList.find { channel ->
-                                                channel.channel_id == removedUser.channel_id
-                                            }?.participants = it
+                                        CoroutineScope(Dispatchers.Main).launch {
+                                            val channel = TalkerSDKApplication.database.roomDao()
+                                                .getChannelById(removedUser.channel_id)
+                                                .firstOrNull()
+                                            channel?.let {
+                                                val updatedParticipants =
+                                                    it.participants.filter { it.user_id != removedUser.removed_participant }
+                                                val updatedChannel =
+                                                    it.copy(participants = updatedParticipants)
+                                                TalkerSDKApplication.database.roomDao()
+                                                    .updateChannel(updatedChannel)
+                                            }
+
+                                            if (removedUser.removed_participant == SharedPreference(
+                                                    applicationContext
+                                                ).getUserData().user_id
+                                            ) {
+                                                TalkerSDKApplication.database.roomDao()
+                                                    .deleteChannel(removedUser.channel_id)
+                                            }
+                                            eventListener.onRemovedUserFromChannel?.invoke(
+                                                removedUser
+                                            )
                                         }
-                                        eventListener.onRemovedUserFromChannel?.invoke(
-                                            removedUser
-                                        )
                                     }
                                 }
                             }
@@ -1105,33 +1132,48 @@ object Talker {
                                     intent.getSerializableExtra(
                                         "channel_obj", AddNewParticipantModelData::class.java
                                     )?.let { addedUser ->
-                                        val channel =
-                                            channelList.firstOrNull { it.channel_id == addedUser.channel_id }
-
-                                        if (channel?.participants?.none { it.user_id == addedUser.new_participants[0].user_id } == true) {
-                                            if (!channel.participants.contains(addedUser.new_participants[0])) {
-                                                channel.participants += addedUser.new_participants[0]
+                                        CoroutineScope(Dispatchers.Main).launch {
+                                            val channel =
+                                                TalkerSDKApplication.database.roomDao()
+                                                    .getChannelById(addedUser.channel_id)
+                                                    .firstOrNull()
+                                            channel?.let {
+                                                val updatedParticipants =
+                                                    it.participants.toMutableList()
+                                                updatedParticipants.add(addedUser.new_participants[0])
+                                                val updatedChannel =
+                                                    it.copy(participants = updatedParticipants)
+                                                TalkerSDKApplication.database.roomDao()
+                                                    .updateChannel(updatedChannel)
                                             }
+                                            eventListener.onAddedUserInChannel?.invoke(
+                                                addedUser
+                                            )
                                         }
-                                        eventListener.onAddedUserInChannel?.invoke(
-                                            addedUser
-                                        )
                                     }
                                 } else {
                                     val channelObj = intent.getSerializableExtra(
                                         "channel_obj"
                                     ) as AddNewParticipantModelData
                                     channelObj.let { addedUser ->
-                                        val channel =
-                                            channelList.firstOrNull { it.channel_id == addedUser.channel_id }
-                                        if (channel?.participants?.none { it.user_id == addedUser.new_participants[0].user_id } == true) {
-                                            if (!channel.participants.contains(addedUser.new_participants[0])) {
-                                                channel.participants += addedUser.new_participants[0]
+                                        CoroutineScope(Dispatchers.Main).launch {
+                                            val channel =
+                                                TalkerSDKApplication.database.roomDao()
+                                                    .getChannelById(addedUser.channel_id)
+                                                    .firstOrNull()
+                                            channel?.let {
+                                                val updatedParticipants =
+                                                    it.participants.toMutableList()
+                                                updatedParticipants.add(addedUser.new_participants[0])
+                                                val updatedChannel =
+                                                    it.copy(participants = updatedParticipants)
+                                                TalkerSDKApplication.database.roomDao()
+                                                    .updateChannel(updatedChannel)
                                             }
+                                            eventListener.onAddedUserInChannel?.invoke(
+                                                addedUser
+                                            )
                                         }
-                                        eventListener.onAddedUserInChannel?.invoke(
-                                            addedUser
-                                        )
                                     }
                                 }
                             }
@@ -1141,24 +1183,28 @@ object Talker {
                                     intent.getSerializableExtra(
                                         "channel_obj", GetAllUserModelData::class.java
                                     )?.let { newUser ->
-                                        if (!userList.contains(newUser)) {
-                                            userList += newUser
+                                        CoroutineScope(Dispatchers.Main).launch {
+                                            TalkerSDKApplication.database.roomDao().insertUsers(
+                                                listOf(newUser)
+                                            )
+                                            eventListener.onNewSdkUser?.invoke(
+                                                newUser
+                                            )
                                         }
-                                        eventListener.onNewSdkUser?.invoke(
-                                            newUser
-                                        )
                                     }
                                 } else {
                                     val channelObj = intent.getSerializableExtra(
                                         "channel_obj"
                                     ) as GetAllUserModelData
                                     channelObj.let { newUser ->
-                                        if (!userList.contains(newUser)) {
-                                            userList += newUser
+                                        CoroutineScope(Dispatchers.Main).launch {
+                                            TalkerSDKApplication.database.roomDao().insertUsers(
+                                                listOf(newUser)
+                                            )
+                                            eventListener.onNewSdkUser?.invoke(
+                                                newUser
+                                            )
                                         }
-                                        eventListener.onNewSdkUser?.invoke(
-                                            newUser
-                                        )
                                     }
                                 }
                             }
@@ -1168,28 +1214,54 @@ object Talker {
                                     intent.getSerializableExtra(
                                         "channel_obj", AddNewAdminModelData::class.java
                                     )?.let { newAdmin ->
-                                        channelList.firstOrNull { channel ->
-                                            channel.channel_id == newAdmin.channel_id
-                                        }?.participants?.firstOrNull { user ->
-                                            user.user_id == newAdmin.new_admin
-                                        }?.admin = true
-                                        eventListener.onAdminAdded?.invoke(
-                                            newAdmin
-                                        )
+                                        CoroutineScope(Dispatchers.Main).launch {
+                                            val channel = TalkerSDKApplication.database.roomDao()
+                                                .getChannelById(newAdmin.channel_id).firstOrNull()
+                                            channel?.let {
+                                                val updatedParticipants =
+                                                    it.participants.map { participant ->
+                                                        if (participant.user_id == newAdmin.new_admin) {
+                                                            participant.copy(admin = true)
+                                                        } else {
+                                                            participant
+                                                        }
+                                                    }
+                                                val updatedChannel =
+                                                    it.copy(participants = updatedParticipants)
+                                                TalkerSDKApplication.database.roomDao()
+                                                    .updateChannel(updatedChannel)
+                                            }
+                                            eventListener.onAdminAdded?.invoke(
+                                                newAdmin
+                                            )
+                                        }
                                     }
                                 } else {
                                     val channelObj = intent.getSerializableExtra(
                                         "channel_obj"
                                     ) as AddNewAdminModelData
                                     channelObj.let { newAdmin ->
-                                        channelList.firstOrNull { channel ->
-                                            channel.channel_id == newAdmin.channel_id
-                                        }?.participants?.firstOrNull { user ->
-                                            user.user_id == newAdmin.new_admin
-                                        }?.admin = true
-                                        eventListener.onAdminAdded?.invoke(
-                                            newAdmin
-                                        )
+                                        CoroutineScope(Dispatchers.Main).launch {
+                                            val channel = TalkerSDKApplication.database.roomDao()
+                                                .getChannelById(newAdmin.channel_id).firstOrNull()
+                                            channel?.let {
+                                                val updatedParticipants =
+                                                    it.participants.map { participant ->
+                                                        if (participant.user_id == newAdmin.new_admin) {
+                                                            participant.copy(admin = true)
+                                                        } else {
+                                                            participant
+                                                        }
+                                                    }
+                                                val updatedChannel =
+                                                    it.copy(participants = updatedParticipants)
+                                                TalkerSDKApplication.database.roomDao()
+                                                    .updateChannel(updatedChannel)
+                                            }
+                                            eventListener.onAdminAdded?.invoke(
+                                                newAdmin
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1199,28 +1271,56 @@ object Talker {
                                     intent.getSerializableExtra(
                                         "channel_obj", AdminRemoveModelData::class.java
                                     )?.let { removedAdmin ->
-                                        channelList.firstOrNull { channel ->
-                                            channel.channel_id == removedAdmin.channel_id
-                                        }?.participants?.firstOrNull { user ->
-                                            user.user_id == removedAdmin.admin_removed
-                                        }?.admin = false
-                                        eventListener.onAdminRemoved?.invoke(
-                                            removedAdmin
-                                        )
+                                        CoroutineScope(Dispatchers.Main).launch {
+                                            val channel = TalkerSDKApplication.database.roomDao()
+                                                .getChannelById(removedAdmin.channel_id)
+                                                .firstOrNull()
+                                            channel?.let {
+                                                val updatedParticipants =
+                                                    it.participants.map { participant ->
+                                                        if (participant.user_id == removedAdmin.admin_removed) {
+                                                            participant.copy(admin = false)
+                                                        } else {
+                                                            participant
+                                                        }
+                                                    }
+                                                val updatedChannel =
+                                                    it.copy(participants = updatedParticipants)
+                                                TalkerSDKApplication.database.roomDao()
+                                                    .updateChannel(updatedChannel)
+                                            }
+                                            eventListener.onAdminRemoved?.invoke(
+                                                removedAdmin
+                                            )
+                                        }
                                     }
                                 } else {
                                     val channelObj = intent.getSerializableExtra(
                                         "channel_obj"
                                     ) as AdminRemoveModelData
                                     channelObj.let { removedAdmin ->
-                                        channelList.firstOrNull { channel ->
-                                            channel.channel_id == removedAdmin.channel_id
-                                        }?.participants?.firstOrNull { user ->
-                                            user.user_id == removedAdmin.admin_removed
-                                        }?.admin = false
-                                        eventListener.onAdminRemoved?.invoke(
-                                            removedAdmin
-                                        )
+                                        CoroutineScope(Dispatchers.Main).launch {
+                                            val channel = TalkerSDKApplication.database.roomDao()
+                                                .getChannelById(removedAdmin.channel_id)
+                                                .firstOrNull()
+                                            channel?.let {
+                                                val updatedParticipants =
+                                                    it.participants.map { participant ->
+                                                        if (participant.user_id == removedAdmin.admin_removed) {
+                                                            participant.copy(admin = false)
+                                                        } else {
+                                                            participant
+                                                        }
+                                                    }
+                                                val updatedChannel =
+                                                    it.copy(participants = updatedParticipants)
+                                                TalkerSDKApplication.database.roomDao()
+                                                    .updateChannel(updatedChannel)
+                                            }
+                                            eventListener.onAdminRemoved?.invoke(
+                                                removedAdmin
+                                            )
+                                        }
                                     }
                                 }
                             }
