@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -20,7 +21,16 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import network.talker.app.dev.LOG_TAG
 import network.talker.app.dev.R
+import network.talker.app.dev.Talker.eventListener
+import network.talker.app.dev.TalkerGlobalVariables
+import network.talker.app.dev.TalkerSdkBackgroundService
+import network.talker.app.dev.model.AudioModel
+import network.talker.app.dev.networking.data.Channel
 import kotlin.random.Random
 
 class AudioPlayerService : Service() {
@@ -28,11 +38,11 @@ class AudioPlayerService : Service() {
     private val mediaLinkList = mutableListOf<String>()
     // first string is for channel id
     // second Array<String> is for storing list of media_links that we are going to play
-    private val liveMsgQue : MutableMap<String, Array<String>> = mutableMapOf()
+    private val liveMsgQue : MutableMap<String, Array<AudioModel>> = mutableMapOf()
     // this contains the list of channel id's whose media_links are currently in the que for playing
     private val liveMsgPrty : MutableList<String> = mutableListOf()
     // this will store the current playing media link
-    private var currentLiveMessage : String? = null
+    private var currentLiveMessage : AudioModel? = null
     override fun onBind(intent: Intent?): IBinder? {
         return null
     }
@@ -44,6 +54,17 @@ class AudioPlayerService : Service() {
                 context ?: return
                 val audioUrl = intent?.extras?.getString("media_link") ?: ""
                 val channelId = intent?.extras?.getString("channel_id") ?: ""
+
+                val audioModel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent?.extras?.getSerializable(
+                        "channel_obj", AudioModel::class.java
+                    )
+                } else {
+                    intent?.getSerializableExtra(
+                        "channel_obj"
+                    ) as AudioModel?
+                }
+
                 Log.d(
                     "media_link",
                     "media_link : $audioUrl"
@@ -52,9 +73,15 @@ class AudioPlayerService : Service() {
                     "channel_id",
                     "channel_id : $channelId"
                 )
-                liveMsgQue[channelId] = liveMsgQue.getOrDefault(channelId, arrayOf()) + audioUrl
-                liveMsgPrty.add(channelId)
-                nextLiveMsg()
+                Log.d(
+                    "audioModel",
+                    "audioModel : $audioModel"
+                )
+                if (audioModel != null) {
+                    liveMsgQue[channelId] = liveMsgQue.getOrDefault(channelId, arrayOf()) + audioModel
+                    liveMsgPrty.add(channelId)
+                    nextLiveMsg()
+                }
             }
         }
         super.onCreate()
@@ -64,6 +91,14 @@ class AudioPlayerService : Service() {
 
     @OptIn(UnstableApi::class)
     private fun nextLiveMsg(){
+        val CHANNEL_NAME = "General"
+        val CHANNEL_ID = "channel 1"
+        val IMPORTANCE = NotificationManager.IMPORTANCE_HIGH
+        val channelDescription = "Channel for important notifications"
+        // Handle the received message
+        val notificationTitle = "Audio message"
+        val notificationBody = "Playing remote audio message..."
+
         if (currentLiveMessage == null){
             if (liveMsgPrty.isNotEmpty()){
                 val channelId = liveMsgPrty[0]
@@ -78,21 +113,66 @@ class AudioPlayerService : Service() {
         }
 
         currentLiveMessage?.let {
-//            https://talker-dev.s3.us-east-2.amazonaws.com/9cd12929-ebec-4140-9d0b-39371668ce6c.m3u8
+            val channel = NotificationChannel(
+                CHANNEL_ID, CHANNEL_NAME, IMPORTANCE
+            )
+            channel.description = channelDescription
+            // create channel...
             val notificationManager = getSystemService(NotificationManager::class.java)
+            currentLiveMessage!!.group_name?.let {
+                notificationManager.createNotificationChannel(channel)
+                val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+                    .setSmallIcon(R.drawable.ic_launcher_foreground)
+                    .setContentTitle(currentLiveMessage!!.group_name)
+                    .setContentText(currentLiveMessage!!.sender_name)
+                    .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                    .setOngoing(true)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setWhen(System.currentTimeMillis())
+                    .setShowWhen(true)
+                    .setAutoCancel(false)
+                    .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+                    .build()
+
+                // notify the user
+                notificationManager.notify(
+                    1,
+                    notification
+                )
+            }
+
             player = ExoPlayer.Builder(this@AudioPlayerService).build()
             player?.addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (playbackState == Player.STATE_ENDED){
-                        if (liveMsgQue.isEmpty()){
-                            notificationManager.cancel(1)
+//                        if (liveMsgQue.isEmpty()){
+                        currentLiveMessage?.group_name?.let {
+                            val notificationReset = NotificationCompat.Builder(this@AudioPlayerService, CHANNEL_ID)
+                                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                                .setContentTitle("Talker SDK")
+                                .setContentText("PTT mode on")
+                                .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                                .setOngoing(true)
+                                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                                .setWhen(System.currentTimeMillis())
+                                .setShowWhen(true)
+                                .setAutoCancel(false)
+                                .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+                                .build()
+
+                            // notify the user
+                            notificationManager.notify(
+                                1,
+                                notificationReset
+                            )
                         }
+//                        }
                         currentLiveMessage = null
                         nextLiveMsg()
                     }
                 }
             })
-            val hlsUri = Uri.parse(currentLiveMessage)
+            val hlsUri = Uri.parse(currentLiveMessage!!.media_link)
             val dataSourceFactory = DefaultHttpDataSource.Factory()
             val hlsMediaSource = HlsMediaSource.Factory(dataSourceFactory).createMediaSource(
                 MediaItem.fromUri(hlsUri)
@@ -146,7 +226,7 @@ class AudioPlayerService : Service() {
         val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("Talker SDK")
-            .setContentText("Foreground service running...")
+            .setContentText("PTT mode on")
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -155,7 +235,7 @@ class AudioPlayerService : Service() {
             .setAutoCancel(false)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
-        startForeground(Random.nextInt(from = 2, until = Int.MAX_VALUE), notification)
+        startForeground(1, notification)
         return START_REDELIVER_INTENT
     }
 

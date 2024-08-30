@@ -13,8 +13,11 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import com.google.gson.Gson
 import com.google.gson.JsonParser
 import network.talker.app.dev.R
+import network.talker.app.dev.model.AudioModel
+import network.talker.app.dev.networking.data.Channel
 import network.talker.app.dev.player.AudioPlayerService
 
 fun handleIntent(intent: Intent?, context: Context) {
@@ -53,41 +56,47 @@ fun handleIntent(intent: Intent?, context: Context) {
                     WorkManager.getInstance(it).enqueue(workRequestBuilder)
                 }
             }
-
             Log.d(
                 "onMessageReceived : ",
-                intent.extras!!.keySet().toList().toString()
-            )
-            // Handle the received message
-            val notificationTitle = "Audio message"
-            val notificationBody = "Playing remote audio message..."
-            val notificationManager = context.getSystemService(NotificationManager::class.java)
-            val channel = NotificationChannel(
-                CHANNEL_ID, CHANNEL_NAME, IMPORTANCE
-            )
-            channel.description = channelDescription
-            // create channel...
-            notificationManager.createNotificationChannel(channel)
-
-            // build notification...
-            val notificationBuilder = NotificationCompat.Builder(
-                context,
-                CHANNEL_ID
-            ).setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setContentTitle(notificationTitle)
-                .setContentText(notificationBody)
-                .setAutoCancel(true)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-
-            // notify the user
-            notificationManager.notify(
-                1,
-                notificationBuilder.build()
+                Gson().fromJson(
+                    intent.extras?.getString("data") ?: "",
+                    AudioModel::class.java
+                ).toString()
+//                Gson().fromJson(
+//                    intent.extras?.getString("data") ?: "",
+//                    Channel::class.java
+//                ).toString()
             )
 
             try {
                 val url = JsonParser.parseString(intent.extras?.getString("data")).asJsonObject["media_link"].asString
                 val channelId = JsonParser.parseString(intent.extras?.getString("data")).asJsonObject["channel_id"].asString
+//                val channel = NotificationChannel(
+//                    CHANNEL_ID, CHANNEL_NAME, IMPORTANCE
+//                )
+//                channel.description = channelDescription
+//                // create channel...
+//
+//                val notificationManager = context.getSystemService(NotificationManager::class.java)
+//                notificationManager.createNotificationChannel(channel)
+//                val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+//                    .setSmallIcon(R.drawable.ic_launcher_foreground)
+//                    .setContentTitle("")
+//                    .setContentText("Foreground service running...")
+//                    .setCategory(NotificationCompat.CATEGORY_SERVICE)
+//                    .setOngoing(true)
+//                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+//                    .setWhen(System.currentTimeMillis())
+//                    .setShowWhen(true)
+//                    .setAutoCancel(false)
+//                    .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+//                    .build()
+//
+//                // notify the user
+//                notificationManager.notify(
+//                    1,
+//                    notification
+//                )
                 context.sendBroadcast(
                     Intent()
                         .setPackage(context.packageName)
@@ -95,6 +104,11 @@ fun handleIntent(intent: Intent?, context: Context) {
                         .apply {
                             putExtra("media_link", url)
                             putExtra("channel_id", channelId)
+                            putExtra("channel_obj",
+                            Gson().fromJson(
+                                intent.extras?.getString("data") ?: "",
+                                AudioModel::class.java
+                            ))
                         }
                 )
             } catch (e : Exception){

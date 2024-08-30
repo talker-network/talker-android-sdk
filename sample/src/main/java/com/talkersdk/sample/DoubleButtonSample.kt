@@ -388,6 +388,25 @@ fun DoubleButtonSample(fcmToken: String) {
                         }
                     }
 
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    if (selectedChannel.channel_type == "group") {
+                        Button(onClick = {
+                            Talker.exitChannel(
+                                context,
+                                selectedChannel.channel_id,
+                                onSuccess = {
+                                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                                },
+                                onError = {
+                                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }) {
+                            Text(text = "Leave Channel")
+                        }
+                    }
+
                     // show the create channel dialog.
                     if (showCreateChannelDialog) {
                         BasicAlertDialog(
@@ -588,11 +607,11 @@ fun DoubleButtonSample(fcmToken: String) {
                                                             // else remove the participant
                                                             Talker.removeParticipant(
                                                                 context,
-                                                                // which participant we want to remove
-                                                                removingParticipant = user.user_id,
                                                                 // from which channel we want to remove them
                                                                 // they are removed, the particular delegate will be called and then you can update the ui accordingly
                                                                 selectedChannel.channel_id,
+                                                                // which participant we want to remove
+                                                                removingParticipantId = user.user_id,
                                                                 onSuccess = {
                                                                     Toast.makeText(
                                                                         context,

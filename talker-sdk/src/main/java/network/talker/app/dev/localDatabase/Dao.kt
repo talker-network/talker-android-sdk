@@ -1,7 +1,6 @@
 package network.talker.app.dev.localDatabase
 
 import androidx.room.Dao
-import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -9,10 +8,9 @@ import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 import network.talker.app.dev.networking.data.Channel
 import network.talker.app.dev.networking.data.GetAllUserModelData
-import network.talker.app.dev.networking.data.Participant
 
 @Dao
-interface RoomDao {
+interface Dao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE, entity = Channel::class)
     suspend fun insertChannels(channels: List<Channel>)

@@ -11,6 +11,8 @@ import network.talker.app.dev.networking.data.CreateChannelModel
 import network.talker.app.dev.networking.data.CreateUserModel
 import network.talker.app.dev.networking.data.CreateUserModelRequest
 import network.talker.app.dev.networking.data.CredModel
+import network.talker.app.dev.networking.data.ExitChannelResponse
+import network.talker.app.dev.networking.data.ExitChannelRequest
 import network.talker.app.dev.networking.data.GetAllUserModel
 import network.talker.app.dev.networking.data.GetChannelListModel
 import network.talker.app.dev.networking.data.RemoveParticipantModel
@@ -24,12 +26,14 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.Multipart
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Part
+import retrofit2.http.Query
 
 internal interface RetrofitApiService {
 
@@ -111,5 +115,11 @@ internal interface RetrofitApiService {
         @Header("Authorization") token: String,
         @Body body : RemoveParticipantModelRequest,
     ) : Response<RemoveParticipantModel>
+
+    @DELETE(ApiRoutes.EXIT_CHANNEL)
+    suspend fun SdkExitChannel(
+        @Header("Authorization") token: String,
+        @Query("channel_id") channelId : String,
+    ) : Response<ExitChannelResponse>
 
 }

@@ -12,4 +12,5 @@ internal object ApiRoutes {
     const val  GET_ALL_CHANNELS = "/chat/channels"
     const val  CREATE_CHANNEL = "/chat/channel"
     const val  EDIT_CHANNEL = "chat/channel"
+    const val  EXIT_CHANNEL = "exit_room"
 }

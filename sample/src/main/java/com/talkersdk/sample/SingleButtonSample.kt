@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
@@ -145,7 +146,8 @@ fun SingleButtonSample(fcmToken: String) {
             Column(
                 Modifier
                     .fillMaxSize()
-                    .padding(innerPadding),
+                    .padding(innerPadding)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -268,9 +270,16 @@ fun SingleButtonSample(fcmToken: String) {
                         if (removedUser.removed_participant == Talker.getCurrentUserId(context)) {
                             showEditChannelDialog = false
                             selectedChannel = channels[0]
+                            Log.d(
+                                "@@@",
+                                "New channel list : $channels"
+                            )
+                            Log.d(
+                                "@@@",
+                                "Current Participant got removed. New selected Channel : ${selectedChannel}"
+                            )
                         }
                     }
-
 
                     LaunchedEffect(key1 = interactionSource) {
                         interactionSource.interactions.collect() {
@@ -399,6 +408,25 @@ fun SingleButtonSample(fcmToken: String) {
                             Text(text = "Edit")
                         }
                     }
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    if (selectedChannel.channel_type == "group") {
+                        Button(onClick = {
+                            Talker.exitChannel(
+                                context,
+                                selectedChannel.channel_id,
+                                onSuccess = {
+                                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                                },
+                                onError = {
+                                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }) {
+                            Text(text = "Leave Channel")
+                        }
+                    }
+
 
                     // show the create channel dialog.
                     if (showCreateChannelDialog) {
@@ -600,11 +628,11 @@ fun SingleButtonSample(fcmToken: String) {
                                                             // else remove the participant
                                                             Talker.removeParticipant(
                                                                 context,
-                                                                // which participant we want to remove
-                                                                removingParticipant = user.user_id,
                                                                 // from which channel we want to remove them
                                                                 // they are removed, the particular delegate will be called and then you can update the ui accordingly
                                                                 selectedChannel.channel_id,
+                                                                // which participant we want to remove
+                                                                removingParticipantId = user.user_id,
                                                                 onSuccess = {
                                                                     Toast.makeText(
                                                                         context,

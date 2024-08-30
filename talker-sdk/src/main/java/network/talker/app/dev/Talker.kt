@@ -39,6 +39,7 @@ import network.talker.app.dev.networking.calls.sdkAddNewParticipant
 import network.talker.app.dev.networking.calls.sdkCreateChannel
 import network.talker.app.dev.networking.calls.sdkCreateUser
 import network.talker.app.dev.networking.calls.sdkCredAPI
+import network.talker.app.dev.networking.calls.sdkExitChannel
 import network.talker.app.dev.networking.calls.sdkGetAllChannels
 import network.talker.app.dev.networking.calls.sdkGetAllUsersApi
 import network.talker.app.dev.networking.calls.sdkRemoveAdmin
@@ -149,6 +150,7 @@ object Talker {
         var onAdminRemoved: ((data: AdminRemoveModelData) -> Unit)? = null
     }
 
+    // call this event listener to get events for all the things happening during the session.
     val eventListener: EventListeners = EventListeners()
 
     private fun validateSDKKey() {
@@ -162,10 +164,16 @@ object Talker {
         return Kinesis.auth.isSignedIn
     }
 
+    // call this function on the onCreate of the application or Activity.
+    // without this function the sdk won't work properly
     fun init(sdkKey: String) {
         Talker.sdkKey = sdkKey
     }
 
+    // call this function to create the user and join in.
+    // this will make api call and create a user on the server.
+    // after that the user will be logged in to the kineses sdk from the credentials found from the api call's response.
+    // also when the api calls are success then the data will be fetched from another api and will be stored in the local database.
     fun createUser(
         context: Context,
         name: String,
@@ -190,7 +198,7 @@ object Talker {
             getChannelListInternal(
                 onFailure
             )
-            TalkerSDKApplication().auth.signIn(res.data.a_username,
+            TalkerSdkBackgroundService().auth.signIn(res.data.a_username,
                 res.data.a_pass,
                 emptyMap(),
                 mapOf(
@@ -212,10 +220,6 @@ object Talker {
 
                     override fun onError(e: java.lang.Exception?) {
                         getMainLooper {
-//                            eventListener.onRegistrationStateChange(
-//                                RegistrationState.Failure,
-//                                "User register failed. Error : ${e?.message}"
-//                            )
                             onFailure("User register failed. Error : ${e?.message}")
                             e?.printStackTrace()
                         }
@@ -223,18 +227,10 @@ object Talker {
                 })
         }, onError = { errorData ->
             getMainLooper {
-//                eventListener.onRegistrationStateChange(
-//                    RegistrationState.Failure,
-//                    errorData.message
-//                )
                 onFailure(errorData.message)
             }
         }, onInternetNotAvailable = {
             getMainLooper {
-//                eventListener.onRegistrationStateChange(
-//                    RegistrationState.Failure,
-//                    "Network not available"
-//                )
                 onFailure("Network not available")
             }
         }, fcmToken = fcmToken,
@@ -242,6 +238,10 @@ object Talker {
         )
     }
 
+    // call this function when you want to login the user.
+    // this will make api call to get the user's data and login in the kineses sdk using that credentials
+    // after that it will check if the previously logged in user is same as the current one.
+    // if not than we will again fetch the users and channels and then we will store the data in the local database.
     fun setUser(
         context: Context,
         userName: String,
@@ -259,8 +259,8 @@ object Talker {
         }
         if (getCurrentUserId(context) != userName) {
             CoroutineScope(Dispatchers.Main).launch {
-                TalkerSDKApplication.database.roomDao().clearUsers()
-                TalkerSDKApplication.database.roomDao().clearChannels()
+                TalkerSdkBackgroundService.database.roomDao().clearUsers()
+                TalkerSdkBackgroundService.database.roomDao().clearChannels()
                 getAllUsersInternal(onFailure)
             }
         }
@@ -276,7 +276,7 @@ object Talker {
                 }else{
                     SharedPreference(context).setUserData(res.data)
                 }
-                TalkerSDKApplication().auth.signIn(res.data.a_username,
+                TalkerSdkBackgroundService().auth.signIn(res.data.a_username,
                     res.data.a_pass,
                     emptyMap(),
                     mapOf(
@@ -287,26 +287,17 @@ object Talker {
                     object : Callback<SignInResult> {
                         override fun onResult(result: SignInResult?) {
                             getMainLooper {
-//                                eventListener.onRegistrationStateChange(
-//                                    RegistrationState.Success,
-//                                    "User register success"
-//                                )
                                 onSuccess("User login success")
                             }
                             establishConnection(
                                 context,
                                 channelName,
                                 region,
-//                                eventListener
                             )
                         }
 
                         override fun onError(e: java.lang.Exception?) {
                             getMainLooper {
-//                                eventListener.onRegistrationStateChange(
-//                                    RegistrationState.Failure,
-//                                    "User register failed. Error : ${e?.message}"
-//                                )
                                 onFailure("User register failed. Error : ${e?.message}")
                                 e?.printStackTrace()
                                 return@getMainLooper
@@ -316,19 +307,11 @@ object Talker {
             },
             onError = { errorData ->
                 getMainLooper {
-//                    eventListener.onRegistrationStateChange(
-//                        RegistrationState.Failure,
-//                        errorData.message
-//                    )
                     onFailure(errorData.message)
                     return@getMainLooper
                 }
             }, onInternetNotAvailable = {
                 getMainLooper {
-//                    eventListener.onRegistrationStateChange(
-//                        RegistrationState.Failure,
-//                        "Network not available"
-//                    )
                     onFailure("Network not available")
                     return@getMainLooper
                 }
@@ -336,247 +319,308 @@ object Talker {
         )
     }
 
+    // this will return channel's list as flow.
+    // you will get all channel's the user is part of.
     fun getChannelList(): kotlinx.coroutines.flow.Flow<List<Channel>> =
-        TalkerSDKApplication.database.roomDao().getAllChannels()
+        TalkerSdkBackgroundService.database.roomDao().getAllChannels()
 
+    // this function will return the user's list that exists in the application.
+    // this will exclude the current logged in user.
     fun getAllUsers(): kotlinx.coroutines.flow.Flow<List<GetAllUserModelData>> =
-        TalkerSDKApplication.database.roomDao().getAllUsersExcept(
-            SharedPreference(TalkerSDKApplication.talkerApplicationContext).getUserData().user_id
+        TalkerSdkBackgroundService.database.roomDao().getAllUsersExcept(
+            SharedPreference(TalkerSdkBackgroundService.talkerApplicationContext).getUserData().user_id
         )
 
-//    fun channelsParticipants(channelId: String): kotlinx.coroutines.flow.Flow<List<Participant>> =
-//        TalkerSDKApplication
-//            .database.roomDao().getParticipantsByChannelId(channelId)
-
-
-    private fun getChannelListInternal(
-        onFailure: (message: String) -> Unit
-    ) {
-        validateSDKKey()
-        applicationContext?.let {
-            sdkGetAllChannels(
-                it,
-                SharedPreference(applicationContext!!).getUserData().user_auth_token,
-                onSuccess = {
-                    CoroutineScope(Dispatchers.Main).launch {
-                        TalkerSDKApplication.database.roomDao().insertChannels(it.data.channels)
-                    }
-                },
-                onError = {
-                    runOnUiThread {
-                        onFailure("Failed fetching channels")
-                    }
-                },
-                onInternetNotAvailable = {
-                    runOnUiThread {
-                        onFailure("Failure due to no internet connectivity")
-                    }
-                }
-            )
-        }
+    fun getCurrentUserId(context: Context): String {
+        val sharedPreference = SharedPreference(context)
+        return sharedPreference.getUserData().user_id
     }
 
-    private fun getAllUsersInternal(onFailure: (message: String) -> Unit) {
-        validateSDKKey()
-        applicationContext?.let {
-            sdkGetAllUsersApi(
-                it,
-                sdkKey,
-                onSuccess = {
-                    CoroutineScope(Dispatchers.Main).launch {
-                        TalkerSDKApplication.database.roomDao().insertUsers(it.data)
-                    }
-                },
-                onError = {
-                    runOnUiThread {
-                        onFailure("Failed featching users list")
-                    }
-                },
-                onInternetNotAvailable = {
-                    runOnUiThread {
-                        onFailure("Failure due to no internet connectivity")
-                    }
-                }
-            )
-        }
-    }
-
+    // call this function to edit the channel's name
+    // this function will call the api for changing the name
+    // and also it will update the local databse as well.
     fun editChannelName(
         context: Context,
-        new_name: String,
+        newName: String,
         channelId: String,
         onSuccess: (newName: String) -> Unit,
-        onFailure: () -> Unit
+        onFailure: (message : String) -> Unit
     ) {
         validateSDKKey()
-        sdkUpdateChannelName(
-            context,
-            SharedPreference(context).getUserData().user_auth_token,
-            channelId,
-            new_name,
-            onSuccess = {
-                if (it.success) {
-                    CoroutineScope(Dispatchers.Main).launch {
-                        val channel =
-                            TalkerSDKApplication.database.roomDao().getChannelById(channelId)
-                        val updatedChannel =
-                            channel.firstOrNull()?.copy(group_name = it.data.new_name)
-                        if (updatedChannel != null) {
-                            TalkerSDKApplication.database.roomDao().updateChannel(updatedChannel)
-                        }
-                        onSuccess(it.data.new_name)
-                    }
-                } else {
-                    onFailure()
-                }
-            },
-            onError = {
-                onFailure()
-            },
-            onInternetNotAvailable = {
-                onFailure()
+
+        if (channelId.isBlank()) {
+            onFailure("Invalid channelId")
+            return
+        }
+        if (newName.isBlank()) {
+            onFailure("Invalid newName")
+            return
+        }
+
+        CoroutineScope(Dispatchers.Main).launch {
+            val channelType = TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId).firstOrNull()?.channel_type
+            if (channelType == "workspace_general"){
+                onFailure("Cannot edit general channel")
+                return@launch
             }
-        )
+            if (channelType == "direct") {
+                onFailure("Cannot edit direct channel")
+                return@launch
+            }
+            sdkUpdateChannelName(
+                context,
+                SharedPreference(context).getUserData().user_auth_token,
+                channelId,
+                newName,
+                onSuccess = {
+                    if (it.success) {
+                        CoroutineScope(Dispatchers.Main).launch {
+                            val channel =
+                                TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId)
+                            val updatedChannel =
+                                channel.firstOrNull()?.copy(group_name = it.data.new_name)
+                            if (updatedChannel != null) {
+                                TalkerSdkBackgroundService.database.roomDao().updateChannel(updatedChannel)
+                            }
+                            onSuccess(it.data.new_name)
+                        }
+                    } else {
+                        onFailure("Failed")
+                    }
+                },
+                onError = {
+                    onFailure(it.message)
+                },
+                onInternetNotAvailable = {
+                    onFailure("Failure due to no internet connectivity")
+                }
+            )
+        }
     }
 
+    // call this function to remove a participant from some channel
+    // updating local database in handled internally.
     fun removeParticipant(
         context: Context,
-        removingParticipant: String,
         channelId: String,
+        removingParticipantId: String,
         onSuccess: (message: String) -> Unit,
-        onFailure: () -> Unit
+        onFailure: (message : String) -> Unit
     ) {
         validateSDKKey()
-        sdkRemoveParticipant(
-            context,
-            SharedPreference(context).getUserData().user_auth_token,
-            channelId,
-            removingParticipant,
-            onSuccess = {
-                if (it.success) {
-                    onSuccess("Participant removed")
-                } else {
-                    onFailure()
-                }
-            },
-            onError = {
-                if (TalkerGlobalVariables.printLogs) {
-                    Log.d(
-                        LOG_TAG,
-                        "Error : ${it.message}"
-                    )
-                }
-                onFailure()
-            },
-            onInternetNotAvailable = {
-                onFailure()
+        if (channelId.isBlank()) {
+            onFailure("Invalid channelId")
+            return
+        }
+        if (removingParticipantId.isBlank()) {
+            onFailure("Invalid removingParticipantId")
+            return
+        }
+        CoroutineScope(Dispatchers.Main).launch {
+            val channelType =
+                TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId)
+                    .firstOrNull()?.channel_type
+            if (channelType == "workspace_general") {
+                onFailure("Cannot remove participant from general channel")
+                return@launch
             }
-        )
+            if (channelType == "direct") {
+                onFailure("Cannot remove participant from direct channel")
+                return@launch
+            }
+
+            sdkRemoveParticipant(
+                context,
+                SharedPreference(context).getUserData().user_auth_token,
+                channelId,
+                removingParticipantId,
+                onSuccess = {
+                    if (it.success) {
+                        onSuccess("Participant removed")
+                    } else {
+                        onFailure("Failed")
+                    }
+                },
+                onError = {
+                    if (TalkerGlobalVariables.printLogs) {
+                        Log.d(
+                            LOG_TAG,
+                            "Error : ${it.message}"
+                        )
+                    }
+                    onFailure(it.message)
+                },
+                onInternetNotAvailable = {
+                    onFailure("Failure due to no internet connectivity")
+                }
+            )
+        }
     }
 
+    // call this function to add a participant in some particular channel
+    // local database in handled internally.
     fun addParticipant(
         context: Context,
         channelId: String,
         newParticipant: String,
         onSuccess: (message: String) -> Unit,
-        onFailure: () -> Unit
+        onFailure: (message : String) -> Unit
     ) {
         validateSDKKey()
-        sdkAddNewParticipant(
-            context,
-            SharedPreference(context).getUserData().user_auth_token,
-            channelId,
-            newParticipant,
-            onSuccess = {
-                if (it.success) {
-                    onSuccess("Added SuccessFully")
-                } else {
-                    onFailure()
-                }
-            },
-            onError = {
-                onFailure()
-            },
-            onInternetNotAvailable = {
-                onFailure()
+        if (channelId.isBlank()) {
+            onFailure("Invalid channelId")
+            return
+        }
+        if (newParticipant.isBlank()) {
+            onFailure("Invalid newParticipant")
+            return
+        }
+        CoroutineScope(Dispatchers.Main).launch {
+            val channelType =
+                TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId)
+                    .firstOrNull()?.channel_type
+            if (channelType == "workspace_general") {
+                onFailure("Cannot add participant in general channel")
+                return@launch
             }
-        )
+            if (channelType == "direct") {
+                onFailure("Cannot add more participant in direct channel")
+                return@launch
+            }
+
+            sdkAddNewParticipant(
+                context,
+                SharedPreference(context).getUserData().user_auth_token,
+                channelId,
+                newParticipant,
+                onSuccess = {
+                    if (it.success) {
+                        onSuccess("Added SuccessFully")
+                    } else {
+                        onFailure("Failed")
+                    }
+                },
+                onError = {
+                    onFailure(it.message)
+                },
+                onInternetNotAvailable = {
+                    onFailure("Failure due to no internet connectivity")
+                }
+            )
+        }
     }
 
+    // call this function to make a participant of some channel the admin
     fun addAdmin(
         context: Context,
         channelId: String,
         newAdminId: String,
         onSuccess: (message: String) -> Unit,
-        onFailure: () -> Unit
+        onFailure: (message : String) -> Unit
     ) {
         validateSDKKey()
-        sdkAddNewAdmin(
-            context,
-            SharedPreference(context).getUserData().user_auth_token,
-            channelId,
-            newAdminId,
-            onSuccess = {
-                if (it.success) {
-                    onSuccess("Admin added")
-                } else {
-                    onFailure()
-                }
-            },
-            onError = {
-                onFailure()
-            },
-            onInternetNotAvailable = {
-                onFailure()
+
+        if (channelId.isBlank()) {
+            onFailure("Invalid channelId")
+            return
+        }
+        if (newAdminId.isBlank()) {
+            onFailure("Invalid newAdminId")
+            return
+        }
+
+
+        CoroutineScope(Dispatchers.Main).launch {
+            val channelType =
+                TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId)
+                    .firstOrNull()?.channel_type
+            if (channelType == "workspace_general") {
+                onFailure("Cannot change admin in general channel")
+                return@launch
             }
-        )
+            if (channelType == "direct") {
+                onFailure("Cannot change admin in direct channel")
+                return@launch
+            }
+            sdkAddNewAdmin(
+                context,
+                SharedPreference(context).getUserData().user_auth_token,
+                channelId,
+                newAdminId,
+                onSuccess = {
+                    if (it.success) {
+                        onSuccess("Admin added")
+                    } else {
+                        onFailure("Failed")
+                    }
+                },
+                onError = {
+                    onFailure(it.message)
+                },
+                onInternetNotAvailable = {
+                    onFailure("Failure due to no internet connectivity")
+                }
+            )
+        }
     }
 
+    // call this function to remove some participant from the post of admin
     fun removeAdmin(
         context: Context,
         channelId: String,
         removeAdminID: String,
         onSuccess: (message: String) -> Unit,
-        onFailure: () -> Unit
+        onFailure: (message : String) -> Unit
     ) {
         validateSDKKey()
-        sdkRemoveAdmin(
-            context,
-            SharedPreference(context).getUserData().user_auth_token,
-            channelId,
-            removeAdminID,
-            onSuccess = {
-                if (it.success) {
-                    onSuccess("Admin removed")
-                } else {
-                    onFailure()
-                }
-            },
-            onError = {
-                onFailure()
-            },
-            onInternetNotAvailable = {
-                onFailure()
+
+
+        if (channelId.isBlank()) {
+            onFailure("Invalid channelId")
+            return
+        }
+
+        if (removeAdminID.isBlank()) {
+            onFailure("Invalid removeAdminId")
+            return
+        }
+        CoroutineScope(Dispatchers.Main).launch {
+            val channelType =
+                TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId)
+                    .firstOrNull()?.channel_type
+            if (channelType == "workspace_general") {
+                onFailure("Cannot remove admin from general channel")
+                return@launch
             }
-        )
+            if (channelType == "direct") {
+                onFailure("Cannot remove admin from direct channel")
+                return@launch
+            }
+
+            sdkRemoveAdmin(
+                context,
+                SharedPreference(context).getUserData().user_auth_token,
+                channelId,
+                removeAdminID,
+                onSuccess = {
+                    if (it.success) {
+                        onSuccess("Admin removed")
+                    } else {
+                        onFailure("Failed")
+                    }
+                },
+                onError = {
+                    onFailure(it.message)
+                },
+                onInternetNotAvailable = {
+                    onFailure("Failure due to no internet connectivity")
+                }
+            )
+        }
     }
 
-//    private callGetChannelList() {
-//        sdkGetAllChannels(
-//            applicationContext,
-//            sdkKey,
-//            onSuccess = {
-//                return@sdkGetAllChannels
-//            },
-//            onError = {
-//
-//            },
-//            onInternetNotAvailable = {
-//
-//            }
-//        )
-//    }
-
+    // call this function to start sharing audio in some particular channel.
+    // this will return a call back function which will tell if the channel is available for speaking or not.
     fun startPttAudio(channelId: String, isChannelAvailable: (Boolean) -> Unit) {
         validateSDKKey()
         mChannelId = channelId
@@ -615,6 +659,7 @@ object Talker {
         }
     }
 
+    // call this function to stop speaking.
     fun stopPttAudio() {
         validateSDKKey()
         if (hasStartedTalking) {
@@ -625,6 +670,9 @@ object Talker {
     }
 
     // close everything....
+    // this function will close all the connections.
+    // call this to end session
+    // and also call this in onDestroy() of the main activity of yours.
     fun closeConnection() {
         runOnUiThread {
             synchronized(this) {
@@ -686,7 +734,7 @@ object Talker {
         }
     }
 
-
+    // call this function to create a group channel
     fun createGroupChannel(
         context: Context,
         name: String,
@@ -696,6 +744,15 @@ object Talker {
         onInternetNotAvailable: () -> Unit = {},
     ) {
         validateSDKKey()
+        if (name.isBlank()) {
+            onError("Invalid name")
+            return
+        }
+
+        if (participantId.isBlank()) {
+            onError("Invalid participantId")
+            return
+        }
         sdkCreateChannel(
             context,
             sdkKey,
@@ -712,6 +769,7 @@ object Talker {
         )
     }
 
+    // call this function to create a peer to peer channel with some particular user.
     fun createDirectChannel(
         context: Context,
         participantId: String,
@@ -720,7 +778,10 @@ object Talker {
         onInternetNotAvailable: () -> Unit = {},
     ) {
         validateSDKKey()
-
+        if (participantId.isBlank()) {
+            onError("Invalid participantId")
+            return
+        }
         Log.d(
             LOG_TAG,
             "Validated sdk key"
@@ -745,6 +806,109 @@ object Talker {
         )
     }
 
+    // call this function when you want to leave some channel.
+    // remember that you cannot leave any general channel or direct channel
+    fun exitChannel(
+        context: Context,
+        channelId : String,
+        onSuccess : (message : String) -> Unit = {},
+        onError : (String) -> Unit = {},
+        onInternetNotAvailable: () -> Unit = {}
+    ) {
+        validateSDKKey()
+        if (channelId.isBlank()) {
+            onError("Invalid Channel id")
+            return
+        }
+        CoroutineScope(Dispatchers.Main).launch {
+            val channelType = TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId).firstOrNull()?.channel_type
+            if (channelType == "workspace_general"){
+                onError("Cannot leave general channel")
+                return@launch
+            }
+            if (channelType == "direct") {
+                onError("Cannot leave this channel")
+                return@launch
+            }
+            sdkExitChannel(
+                context,
+                SharedPreference(context).getUserData().user_auth_token,
+                channelId,
+                onSuccess = {
+                    if (it.success) {
+                        onSuccess("Left channel successfully")
+                    }else{
+                        onError(it.message)
+                    }
+                },
+                onError = {
+                    onError(it.message)
+                },
+                onInternetNotAvailable
+            )
+        }
+    }
+
+    private fun isChannelAvailable(channelId: String): Boolean {
+        var isChannelAvailable = false
+        SocketHandler.broadCastStart(channelId) { ack ->
+            isChannelAvailable = ack.getOrNull(0) == true
+        }
+        SocketHandler.broadCastStop(channelId)
+        return isChannelAvailable
+    }
+
+    private fun getChannelListInternal(
+        onFailure: (message: String) -> Unit
+    ) {
+        validateSDKKey()
+        applicationContext?.let {
+            sdkGetAllChannels(
+                it,
+                SharedPreference(applicationContext!!).getUserData().user_auth_token,
+                onSuccess = {
+                    CoroutineScope(Dispatchers.Main).launch {
+                        TalkerSdkBackgroundService.database.roomDao().insertChannels(it.data.channels)
+                    }
+                },
+                onError = {
+                    runOnUiThread {
+                        onFailure("Failed fetching channels")
+                    }
+                },
+                onInternetNotAvailable = {
+                    runOnUiThread {
+                        onFailure("Failure due to no internet connectivity")
+                    }
+                }
+            )
+        }
+    }
+
+    private fun getAllUsersInternal(onFailure: (message: String) -> Unit) {
+        validateSDKKey()
+        applicationContext?.let {
+            sdkGetAllUsersApi(
+                it,
+                sdkKey,
+                onSuccess = {
+                    CoroutineScope(Dispatchers.Main).launch {
+                        TalkerSdkBackgroundService.database.roomDao().insertUsers(it.data)
+                    }
+                },
+                onError = {
+                    runOnUiThread {
+                        onFailure("Failed featching users list")
+                    }
+                },
+                onInternetNotAvailable = {
+                    runOnUiThread {
+                        onFailure("Failure due to no internet connectivity")
+                    }
+                }
+            )
+        }
+    }
 
     // close everything....
     private fun closeConnectionForRetry(
@@ -793,30 +957,6 @@ object Talker {
         }
     }
 
-//    private fun logoutUser(
-//        onLogoutSuccess: (message: String) -> Unit = {}
-//    ) {
-//        KinesisTalkerApp.auth.signOut(
-//            SignOutOptions.Builder()
-//                .signOutGlobally(true)
-//                .build(),
-//            object : Callback<Void?> {
-//                override fun onResult(result: Void?) {
-//                    getMainLooper {
-//                        onLogoutSuccess("Sign out successful")
-//                    }
-//                }
-//
-//                override fun onError(e: java.lang.Exception?) {
-//                    getMainLooper {
-//                        onLogoutSuccess("Sign out successful")
-//                    }
-//                    e?.printStackTrace()
-//                }
-//            }
-//        )
-//    }
-
     private fun establishConnection(
         applicationContext: Context,
         channelName: String,
@@ -826,7 +966,7 @@ object Talker {
             Dispatchers.IO
         ).launch {
             Talker.applicationContext = applicationContext
-            mCreds = TalkerSDKApplication().auth.credentials
+            mCreds = TalkerSdkBackgroundService().auth.credentials
             audioManager = applicationContext.getSystemService(AudioManager::class.java)
             val sharedPreference = SharedPreference(applicationContext)
             mClientId = sharedPreference.getUserData().user_auth_token
@@ -986,7 +1126,7 @@ object Talker {
                                             "channel_obj", Channel::class.java
                                         )?.let {
                                             CoroutineScope(Dispatchers.Main).launch {
-                                                TalkerSDKApplication.database.roomDao()
+                                                TalkerSdkBackgroundService.database.roomDao()
                                                     .insertChannels(
                                                         listOf(it)
                                                     )
@@ -1000,7 +1140,7 @@ object Talker {
                                             "channel_obj"
                                         ) as Channel
                                         CoroutineScope(Dispatchers.Main).launch {
-                                            TalkerSDKApplication.database.roomDao().insertChannels(
+                                            TalkerSdkBackgroundService.database.roomDao().insertChannels(
                                                 listOf(channelObj)
                                             )
                                             eventListener.onNewChannel?.invoke(
@@ -1019,12 +1159,12 @@ object Talker {
                                         "channel_obj", UpdateChannelNameModelData::class.java
                                     )?.let {
                                         CoroutineScope(Dispatchers.Main).launch {
-                                            val channel = TalkerSDKApplication.database.roomDao()
+                                            val channel = TalkerSdkBackgroundService.database.roomDao()
                                                 .getChannelById(it.channel_id)
                                             val updatedChannel = channel.firstOrNull()
                                                 ?.copy(group_name = it.new_name)
                                             if (updatedChannel != null) {
-                                                TalkerSDKApplication.database.roomDao()
+                                                TalkerSdkBackgroundService.database.roomDao()
                                                     .updateChannel(updatedChannel)
                                             }
 
@@ -1038,12 +1178,12 @@ object Talker {
                                         "channel_obj"
                                     ) as UpdateChannelNameModelData
                                     CoroutineScope(Dispatchers.Main).launch {
-                                        val channel = TalkerSDKApplication.database.roomDao()
+                                        val channel = TalkerSdkBackgroundService.database.roomDao()
                                             .getChannelById(channelObj.channel_id)
                                         val updatedChannel = channel.firstOrNull()
                                             ?.copy(group_name = channelObj.new_name)
                                         if (updatedChannel != null) {
-                                            TalkerSDKApplication.database.roomDao()
+                                            TalkerSdkBackgroundService.database.roomDao()
                                                 .updateChannel(updatedChannel)
                                         }
                                         eventListener.onChannelUpdated?.invoke(
@@ -1059,18 +1199,8 @@ object Talker {
                                     intent.getSerializableExtra(
                                         "channel_obj", RemoveParticipantModelData::class.java
                                     )?.let { removedUser ->
-//                                        channelList.find { channel ->
-//                                            channel.channel_id == removedUser.channel_id
-//                                        }?.participants?.filter { user ->
-//                                            user.user_id != removedUser.removed_participant
-//                                        }?.let {
-//                                            channelList.find { channel ->
-//                                                channel.channel_id == removedUser.channel_id
-//                                            }?.participants = it
-//                                        }
-
                                         CoroutineScope(Dispatchers.Main).launch {
-                                            val channel = TalkerSDKApplication.database.roomDao()
+                                            val channel = TalkerSdkBackgroundService.database.roomDao()
                                                 .getChannelById(removedUser.channel_id)
                                                 .firstOrNull()
                                             channel?.let {
@@ -1078,7 +1208,7 @@ object Talker {
                                                     it.participants.filter { it.user_id != removedUser.removed_participant }
                                                 val updatedChannel =
                                                     it.copy(participants = updatedParticipants)
-                                                TalkerSDKApplication.database.roomDao()
+                                                TalkerSdkBackgroundService.database.roomDao()
                                                     .updateChannel(updatedChannel)
                                             }
 
@@ -1086,7 +1216,7 @@ object Talker {
                                                     applicationContext
                                                 ).getUserData().user_id
                                             ) {
-                                                TalkerSDKApplication.database.roomDao()
+                                                TalkerSdkBackgroundService.database.roomDao()
                                                     .deleteChannel(removedUser.channel_id)
                                             }
                                             eventListener.onRemovedUserFromChannel?.invoke(
@@ -1100,7 +1230,7 @@ object Talker {
                                     ) as RemoveParticipantModelData
                                     channelObj.let { removedUser ->
                                         CoroutineScope(Dispatchers.Main).launch {
-                                            val channel = TalkerSDKApplication.database.roomDao()
+                                            val channel = TalkerSdkBackgroundService.database.roomDao()
                                                 .getChannelById(removedUser.channel_id)
                                                 .firstOrNull()
                                             channel?.let {
@@ -1108,7 +1238,7 @@ object Talker {
                                                     it.participants.filter { it.user_id != removedUser.removed_participant }
                                                 val updatedChannel =
                                                     it.copy(participants = updatedParticipants)
-                                                TalkerSDKApplication.database.roomDao()
+                                                TalkerSdkBackgroundService.database.roomDao()
                                                     .updateChannel(updatedChannel)
                                             }
 
@@ -1116,7 +1246,7 @@ object Talker {
                                                     applicationContext
                                                 ).getUserData().user_id
                                             ) {
-                                                TalkerSDKApplication.database.roomDao()
+                                                TalkerSdkBackgroundService.database.roomDao()
                                                     .deleteChannel(removedUser.channel_id)
                                             }
                                             eventListener.onRemovedUserFromChannel?.invoke(
@@ -1134,7 +1264,7 @@ object Talker {
                                     )?.let { addedUser ->
                                         CoroutineScope(Dispatchers.Main).launch {
                                             val channel =
-                                                TalkerSDKApplication.database.roomDao()
+                                                TalkerSdkBackgroundService.database.roomDao()
                                                     .getChannelById(addedUser.channel_id)
                                                     .firstOrNull()
                                             channel?.let {
@@ -1143,7 +1273,7 @@ object Talker {
                                                 updatedParticipants.add(addedUser.new_participants[0])
                                                 val updatedChannel =
                                                     it.copy(participants = updatedParticipants)
-                                                TalkerSDKApplication.database.roomDao()
+                                                TalkerSdkBackgroundService.database.roomDao()
                                                     .updateChannel(updatedChannel)
                                             }
                                             eventListener.onAddedUserInChannel?.invoke(
@@ -1158,7 +1288,7 @@ object Talker {
                                     channelObj.let { addedUser ->
                                         CoroutineScope(Dispatchers.Main).launch {
                                             val channel =
-                                                TalkerSDKApplication.database.roomDao()
+                                                TalkerSdkBackgroundService.database.roomDao()
                                                     .getChannelById(addedUser.channel_id)
                                                     .firstOrNull()
                                             channel?.let {
@@ -1167,7 +1297,7 @@ object Talker {
                                                 updatedParticipants.add(addedUser.new_participants[0])
                                                 val updatedChannel =
                                                     it.copy(participants = updatedParticipants)
-                                                TalkerSDKApplication.database.roomDao()
+                                                TalkerSdkBackgroundService.database.roomDao()
                                                     .updateChannel(updatedChannel)
                                             }
                                             eventListener.onAddedUserInChannel?.invoke(
@@ -1184,7 +1314,7 @@ object Talker {
                                         "channel_obj", GetAllUserModelData::class.java
                                     )?.let { newUser ->
                                         CoroutineScope(Dispatchers.Main).launch {
-                                            TalkerSDKApplication.database.roomDao().insertUsers(
+                                            TalkerSdkBackgroundService.database.roomDao().insertUsers(
                                                 listOf(newUser)
                                             )
                                             eventListener.onNewSdkUser?.invoke(
@@ -1198,7 +1328,7 @@ object Talker {
                                     ) as GetAllUserModelData
                                     channelObj.let { newUser ->
                                         CoroutineScope(Dispatchers.Main).launch {
-                                            TalkerSDKApplication.database.roomDao().insertUsers(
+                                            TalkerSdkBackgroundService.database.roomDao().insertUsers(
                                                 listOf(newUser)
                                             )
                                             eventListener.onNewSdkUser?.invoke(
@@ -1215,7 +1345,7 @@ object Talker {
                                         "channel_obj", AddNewAdminModelData::class.java
                                     )?.let { newAdmin ->
                                         CoroutineScope(Dispatchers.Main).launch {
-                                            val channel = TalkerSDKApplication.database.roomDao()
+                                            val channel = TalkerSdkBackgroundService.database.roomDao()
                                                 .getChannelById(newAdmin.channel_id).firstOrNull()
                                             channel?.let {
                                                 val updatedParticipants =
@@ -1228,7 +1358,7 @@ object Talker {
                                                     }
                                                 val updatedChannel =
                                                     it.copy(participants = updatedParticipants)
-                                                TalkerSDKApplication.database.roomDao()
+                                                TalkerSdkBackgroundService.database.roomDao()
                                                     .updateChannel(updatedChannel)
                                             }
                                             eventListener.onAdminAdded?.invoke(
@@ -1242,7 +1372,7 @@ object Talker {
                                     ) as AddNewAdminModelData
                                     channelObj.let { newAdmin ->
                                         CoroutineScope(Dispatchers.Main).launch {
-                                            val channel = TalkerSDKApplication.database.roomDao()
+                                            val channel = TalkerSdkBackgroundService.database.roomDao()
                                                 .getChannelById(newAdmin.channel_id).firstOrNull()
                                             channel?.let {
                                                 val updatedParticipants =
@@ -1255,7 +1385,7 @@ object Talker {
                                                     }
                                                 val updatedChannel =
                                                     it.copy(participants = updatedParticipants)
-                                                TalkerSDKApplication.database.roomDao()
+                                                TalkerSdkBackgroundService.database.roomDao()
                                                     .updateChannel(updatedChannel)
                                             }
                                             eventListener.onAdminAdded?.invoke(
@@ -1272,7 +1402,7 @@ object Talker {
                                         "channel_obj", AdminRemoveModelData::class.java
                                     )?.let { removedAdmin ->
                                         CoroutineScope(Dispatchers.Main).launch {
-                                            val channel = TalkerSDKApplication.database.roomDao()
+                                            val channel = TalkerSdkBackgroundService.database.roomDao()
                                                 .getChannelById(removedAdmin.channel_id)
                                                 .firstOrNull()
                                             channel?.let {
@@ -1286,7 +1416,7 @@ object Talker {
                                                     }
                                                 val updatedChannel =
                                                     it.copy(participants = updatedParticipants)
-                                                TalkerSDKApplication.database.roomDao()
+                                                TalkerSdkBackgroundService.database.roomDao()
                                                     .updateChannel(updatedChannel)
                                             }
                                             eventListener.onAdminRemoved?.invoke(
@@ -1300,7 +1430,7 @@ object Talker {
                                     ) as AdminRemoveModelData
                                     channelObj.let { removedAdmin ->
                                         CoroutineScope(Dispatchers.Main).launch {
-                                            val channel = TalkerSDKApplication.database.roomDao()
+                                            val channel = TalkerSdkBackgroundService.database.roomDao()
                                                 .getChannelById(removedAdmin.channel_id)
                                                 .firstOrNull()
                                             channel?.let {
@@ -1314,7 +1444,7 @@ object Talker {
                                                     }
                                                 val updatedChannel =
                                                     it.copy(participants = updatedParticipants)
-                                                TalkerSDKApplication.database.roomDao()
+                                                TalkerSdkBackgroundService.database.roomDao()
                                                     .updateChannel(updatedChannel)
                                             }
                                             eventListener.onAdminRemoved?.invoke(
@@ -2016,21 +2146,6 @@ object Talker {
             })
         }
     }
-
-    fun getCurrentUserId(context: Context): String {
-        val sharedPreference = SharedPreference(context)
-        return sharedPreference.getUserData().user_id
-    }
-
-    private fun isChannelAvailable(channelId: String): Boolean {
-        var isChannelAvailable = false
-        SocketHandler.broadCastStart(channelId) { ack ->
-            isChannelAvailable = ack.getOrNull(0) == true
-        }
-        SocketHandler.broadCastStop(channelId)
-        return isChannelAvailable
-    }
-
 
     private fun startStream() {
         val messageId = UUID.randomUUID()
