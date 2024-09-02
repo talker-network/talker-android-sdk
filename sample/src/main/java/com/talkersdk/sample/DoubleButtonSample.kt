@@ -252,7 +252,7 @@ fun DoubleButtonSample(fcmToken: String) {
 
 
                     // when you are removed from channel or any other person is removed from channel.
-                    Talker.eventListener.onRemovedUserFromChannel = { removedUser ->
+                    Talker.eventListener.onUserRemovedFromChannel = { removedUser ->
                         // if the user that is removed is nothing but me than
                         // close the edit channel dialog.
                         if (removedUser.removed_participant == Talker.getCurrentUserId(context)) {

@@ -143,7 +143,7 @@ object Talker {
         var onAudioStatusChange: ((audioStatus: AudioStatus) -> Unit)? = null
         var onNewChannel: ((data: Channel) -> Unit)? = null
         var onChannelUpdated: ((data: UpdateChannelNameModelData) -> Unit)? = null
-        var onRemovedUserFromChannel: ((data: RemoveParticipantModelData) -> Unit)? = null
+        var onUserRemovedFromChannel: ((data: RemoveParticipantModelData) -> Unit)? = null
         var onAddedUserInChannel: ((data: AddNewParticipantModelData) -> Unit)? = null
         var onNewSdkUser: ((data: GetAllUserModelData) -> Unit)? = null
         var onAdminAdded: ((data: AddNewAdminModelData) -> Unit)? = null
@@ -1219,7 +1219,7 @@ object Talker {
                                                 TalkerSdkBackgroundService.database.roomDao()
                                                     .deleteChannel(removedUser.channel_id)
                                             }
-                                            eventListener.onRemovedUserFromChannel?.invoke(
+                                            eventListener.onUserRemovedFromChannel?.invoke(
                                                 removedUser
                                             )
                                         }
@@ -1249,7 +1249,7 @@ object Talker {
                                                 TalkerSdkBackgroundService.database.roomDao()
                                                     .deleteChannel(removedUser.channel_id)
                                             }
-                                            eventListener.onRemovedUserFromChannel?.invoke(
+                                            eventListener.onUserRemovedFromChannel?.invoke(
                                                 removedUser
                                             )
                                         }
