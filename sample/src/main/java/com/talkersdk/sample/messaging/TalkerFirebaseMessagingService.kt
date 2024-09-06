@@ -4,7 +4,8 @@ import android.content.Intent
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import network.talker.app.dev.messaging.handleIntent
+import network.talker.app.dev.Talker
+import network.talker.app.dev.messaging.processTalkerFcm
 
 // add this messaging service to your androidManifest.xml file.
 // this service will be responsible for getting notifications from the server.
@@ -19,7 +20,8 @@ class TalkerFirebaseMessagingService : FirebaseMessagingService() {
     override fun handleIntent(intent: Intent?) {
         // pass the intent and talker sdk will handle playing and showing the notification audio message
         // just handle post notification permission and services permission and sdk will do the rest.
-        handleIntent(intent, this)
+//        processTalkerFcm(intent, this)
+        Talker.processTalkerFcm(intent, this)
     }
 
     override fun onNewToken(token: String) {

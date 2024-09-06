@@ -17,3 +17,10 @@ data class AudioModel(
     val sent_at: String?,
     val start_time: Any?
 ) : Serializable
+
+data class AudioData(
+    val senderId : String,
+    val channelId : String,
+    val channelName : String,
+    val SenderName : String
+) : Serializable

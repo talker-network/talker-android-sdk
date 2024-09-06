@@ -32,6 +32,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import network.talker.app.dev.model.AudioData
 import network.talker.app.dev.model.Event
 import network.talker.app.dev.model.Message
 import network.talker.app.dev.networking.calls.sdkAddNewAdmin
@@ -148,6 +149,7 @@ object Talker {
         var onNewSdkUser: ((data: GetAllUserModelData) -> Unit)? = null
         var onAdminAdded: ((data: AddNewAdminModelData) -> Unit)? = null
         var onAdminRemoved: ((data: AdminRemoveModelData) -> Unit)? = null
+        var currentPttAudio : ((data: AudioData) -> Unit)? = null
     }
 
     // call this event listener to get events for all the things happening during the session.
@@ -244,7 +246,7 @@ object Talker {
     // if not than we will again fetch the users and channels and then we will store the data in the local database.
     fun setUser(
         context: Context,
-        userName: String,
+        userId: String,
         fcmToken: String,
         onSuccess: (message: String) -> Unit = {},
         onFailure: (message: String) -> Unit = {},
@@ -253,11 +255,11 @@ object Talker {
     ) {
         applicationContext = context
         validateSDKKey()
-        if (userName.isEmpty()) {
-            onFailure("Username cannot be empty")
+        if (userId.isEmpty()) {
+            onFailure("UserId cannot be empty")
             return
         }
-        if (getCurrentUserId(context) != userName) {
+        if (getCurrentUserId(context) != userId) {
             CoroutineScope(Dispatchers.Main).launch {
                 TalkerSdkBackgroundService.database.roomDao().clearUsers()
                 TalkerSdkBackgroundService.database.roomDao().clearChannels()
@@ -268,7 +270,7 @@ object Talker {
         sdkSetUser(
             context,
             this.sdkKey,
-            userName,
+            userId,
             onSuccess = { res ->
                 if (res.data.user_id != getCurrentUserId(context)) {
                     SharedPreference(context).setUserData(res.data)
@@ -1450,6 +1452,33 @@ object Talker {
                                             eventListener.onAdminRemoved?.invoke(
                                                 removedAdmin
                                             )
+                                        }
+                                    }
+                                }
+                            }
+
+                            "CURRENT_PTT_AUDIO" -> {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    intent.getSerializableExtra(
+                                        "ptt_audio", AudioData::class.java
+                                    )?.let { audioData ->
+                                        CoroutineScope(Dispatchers.Main).launch {
+                                            eventListener.currentPttAudio?.invoke(
+                                                audioData
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    val channelObj = intent.getSerializableExtra(
+                                        "ptt_audio"
+                                    ) as AudioData
+                                    channelObj.let { audioData ->
+                                        CoroutineScope(Dispatchers.Main).launch {
+                                            CoroutineScope(Dispatchers.Main).launch {
+                                                eventListener.currentPttAudio?.invoke(
+                                                    audioData
+                                                )
+                                            }
                                         }
                                     }
                                 }

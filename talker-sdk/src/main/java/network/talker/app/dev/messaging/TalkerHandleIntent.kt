@@ -1,26 +1,23 @@
 package network.talker.app.dev.messaging
 
 import android.app.ActivityManager
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import androidx.core.app.NotificationCompat
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
 import com.google.gson.Gson
 import com.google.gson.JsonParser
-import network.talker.app.dev.R
+import network.talker.app.dev.Talker
 import network.talker.app.dev.model.AudioModel
-import network.talker.app.dev.networking.data.Channel
 import network.talker.app.dev.player.AudioPlayerService
 
-fun handleIntent(intent: Intent?, context: Context) {
+fun Talker.processTalkerFcm(intent: Intent?, context: Context) {
     val CHANNEL_NAME = "General"
     val CHANNEL_ID = "channel 1"
     val IMPORTANCE = NotificationManager.IMPORTANCE_HIGH
@@ -62,41 +59,11 @@ fun handleIntent(intent: Intent?, context: Context) {
                     intent.extras?.getString("data") ?: "",
                     AudioModel::class.java
                 ).toString()
-//                Gson().fromJson(
-//                    intent.extras?.getString("data") ?: "",
-//                    Channel::class.java
-//                ).toString()
             )
 
             try {
                 val url = JsonParser.parseString(intent.extras?.getString("data")).asJsonObject["media_link"].asString
                 val channelId = JsonParser.parseString(intent.extras?.getString("data")).asJsonObject["channel_id"].asString
-//                val channel = NotificationChannel(
-//                    CHANNEL_ID, CHANNEL_NAME, IMPORTANCE
-//                )
-//                channel.description = channelDescription
-//                // create channel...
-//
-//                val notificationManager = context.getSystemService(NotificationManager::class.java)
-//                notificationManager.createNotificationChannel(channel)
-//                val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-//                    .setSmallIcon(R.drawable.ic_launcher_foreground)
-//                    .setContentTitle("")
-//                    .setContentText("Foreground service running...")
-//                    .setCategory(NotificationCompat.CATEGORY_SERVICE)
-//                    .setOngoing(true)
-//                    .setPriority(NotificationCompat.PRIORITY_HIGH)
-//                    .setWhen(System.currentTimeMillis())
-//                    .setShowWhen(true)
-//                    .setAutoCancel(false)
-//                    .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-//                    .build()
-//
-//                // notify the user
-//                notificationManager.notify(
-//                    1,
-//                    notification
-//                )
                 context.sendBroadcast(
                     Intent()
                         .setPackage(context.packageName)

@@ -21,6 +21,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
+import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -29,6 +30,7 @@ import network.talker.app.dev.R
 import network.talker.app.dev.Talker.eventListener
 import network.talker.app.dev.TalkerGlobalVariables
 import network.talker.app.dev.TalkerSdkBackgroundService
+import network.talker.app.dev.model.AudioData
 import network.talker.app.dev.model.AudioModel
 import network.talker.app.dev.networking.data.Channel
 import kotlin.random.Random
@@ -172,6 +174,25 @@ class AudioPlayerService : Service() {
                     }
                 }
             })
+            sendBroadcast(
+                Intent()
+                    .setPackage(packageName)
+                    .setAction("com.talker.sdk")
+                    .apply {
+                        putExtra("action", "CURRENT_PTT_AUDIO")
+                        putExtra("message", "Current PTT audio playing.")
+                        putExtra(
+                            "channel_obj", Gson().toJson(
+                                AudioData(
+                                    currentLiveMessage?.sender_id ?: "",
+                                    currentLiveMessage?.channel_id ?: "",
+                                    currentLiveMessage?.group_name ?: "",
+                                    currentLiveMessage?.sender_name ?: ""
+                                )
+                            )
+                        )
+                    }
+            )
             val hlsUri = Uri.parse(currentLiveMessage!!.media_link)
             val dataSourceFactory = DefaultHttpDataSource.Factory()
             val hlsMediaSource = HlsMediaSource.Factory(dataSourceFactory).createMediaSource(
