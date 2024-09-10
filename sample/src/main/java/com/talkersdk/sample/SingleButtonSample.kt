@@ -56,6 +56,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import network.talker.app.dev.Talker
+import network.talker.app.dev.model.AudioData
 import network.talker.app.dev.networking.data.Channel
 import network.talker.app.dev.networking.data.GetAllUserModelData
 import network.talker.app.dev.webrtc.AudioStatus
@@ -253,6 +254,9 @@ fun SingleButtonSample(fcmToken: String) {
                     var selectedUser by remember {
                         mutableStateOf<GetAllUserModelData?>(null)
                     }
+                    var currentSpeaking by remember {
+                        mutableStateOf("")
+                    }
 
                     Talker.eventListener.onChannelUpdated = { updatedChannel ->
                         if (selectedChannel.channel_id == updatedChannel.channel_id) {
@@ -279,6 +283,10 @@ fun SingleButtonSample(fcmToken: String) {
                                 "Current Participant got removed. New selected Channel : ${selectedChannel}"
                             )
                         }
+                    }
+
+                    Talker.eventListener.currentPttAudio = { data: AudioData ->
+                        currentSpeaking = data.SenderName
                     }
 
                     LaunchedEffect(key1 = interactionSource) {
@@ -315,7 +323,11 @@ fun SingleButtonSample(fcmToken: String) {
 
                     Text(text = "Audio Status : $status")
 
-                    Spacer(modifier = Modifier.height(50.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Text(text = "Current Speaking : $currentSpeaking")
+
+                    Spacer(modifier = Modifier.height(20.dp))
 
                     Button(
                         onClick = {},
@@ -427,7 +439,6 @@ fun SingleButtonSample(fcmToken: String) {
                         }
                     }
 
-
                     // show the create channel dialog.
                     if (showCreateChannelDialog) {
                         BasicAlertDialog(
@@ -507,7 +518,6 @@ fun SingleButtonSample(fcmToken: String) {
 
                     // edit the channel info dialog
                     if (showEditChannelDialog) {
-
                         BasicAlertDialog(
                             onDismissRequest = { showEditChannelDialog = false },
                             properties = DialogProperties(
@@ -756,6 +766,4 @@ fun SingleButtonSample(fcmToken: String) {
             }
         }
     }
-
-
 }

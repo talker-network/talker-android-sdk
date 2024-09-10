@@ -360,7 +360,7 @@ object Talker {
         }
 
         CoroutineScope(Dispatchers.Main).launch {
-            val channelType = TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId).firstOrNull()?.channel_type
+            val channelType = TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId)?.channel_type
             if (channelType == "workspace_general"){
                 onFailure("Cannot edit general channel")
                 return@launch
@@ -380,7 +380,7 @@ object Talker {
                             val channel =
                                 TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId)
                             val updatedChannel =
-                                channel.firstOrNull()?.copy(group_name = it.data.new_name)
+                                channel?.copy(group_name = it.data.new_name)
                             if (updatedChannel != null) {
                                 TalkerSdkBackgroundService.database.roomDao().updateChannel(updatedChannel)
                             }
@@ -420,8 +420,7 @@ object Talker {
         }
         CoroutineScope(Dispatchers.Main).launch {
             val channelType =
-                TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId)
-                    .firstOrNull()?.channel_type
+                TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId)?.channel_type
             if (channelType == "workspace_general") {
                 onFailure("Cannot remove participant from general channel")
                 return@launch
@@ -479,8 +478,7 @@ object Talker {
         }
         CoroutineScope(Dispatchers.Main).launch {
             val channelType =
-                TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId)
-                    .firstOrNull()?.channel_type
+                TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId)?.channel_type
             if (channelType == "workspace_general") {
                 onFailure("Cannot add participant in general channel")
                 return@launch
@@ -534,8 +532,7 @@ object Talker {
 
         CoroutineScope(Dispatchers.Main).launch {
             val channelType =
-                TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId)
-                    .firstOrNull()?.channel_type
+                TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId)?.channel_type
             if (channelType == "workspace_general") {
                 onFailure("Cannot change admin in general channel")
                 return@launch
@@ -588,8 +585,7 @@ object Talker {
         }
         CoroutineScope(Dispatchers.Main).launch {
             val channelType =
-                TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId)
-                    .firstOrNull()?.channel_type
+                TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId)?.channel_type
             if (channelType == "workspace_general") {
                 onFailure("Cannot remove admin from general channel")
                 return@launch
@@ -823,7 +819,7 @@ object Talker {
             return
         }
         CoroutineScope(Dispatchers.Main).launch {
-            val channelType = TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId).firstOrNull()?.channel_type
+            val channelType = TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId)?.channel_type
             if (channelType == "workspace_general"){
                 onError("Cannot leave general channel")
                 return@launch
@@ -1163,8 +1159,7 @@ object Talker {
                                         CoroutineScope(Dispatchers.Main).launch {
                                             val channel = TalkerSdkBackgroundService.database.roomDao()
                                                 .getChannelById(it.channel_id)
-                                            val updatedChannel = channel.firstOrNull()
-                                                ?.copy(group_name = it.new_name)
+                                            val updatedChannel = channel?.copy(group_name = it.new_name)
                                             if (updatedChannel != null) {
                                                 TalkerSdkBackgroundService.database.roomDao()
                                                     .updateChannel(updatedChannel)
@@ -1182,7 +1177,7 @@ object Talker {
                                     CoroutineScope(Dispatchers.Main).launch {
                                         val channel = TalkerSdkBackgroundService.database.roomDao()
                                             .getChannelById(channelObj.channel_id)
-                                        val updatedChannel = channel.firstOrNull()
+                                        val updatedChannel = channel
                                             ?.copy(group_name = channelObj.new_name)
                                         if (updatedChannel != null) {
                                             TalkerSdkBackgroundService.database.roomDao()
@@ -1204,7 +1199,6 @@ object Talker {
                                         CoroutineScope(Dispatchers.Main).launch {
                                             val channel = TalkerSdkBackgroundService.database.roomDao()
                                                 .getChannelById(removedUser.channel_id)
-                                                .firstOrNull()
                                             channel?.let {
                                                 val updatedParticipants =
                                                     it.participants.filter { it.user_id != removedUser.removed_participant }
@@ -1234,7 +1228,6 @@ object Talker {
                                         CoroutineScope(Dispatchers.Main).launch {
                                             val channel = TalkerSdkBackgroundService.database.roomDao()
                                                 .getChannelById(removedUser.channel_id)
-                                                .firstOrNull()
                                             channel?.let {
                                                 val updatedParticipants =
                                                     it.participants.filter { it.user_id != removedUser.removed_participant }
@@ -1268,7 +1261,6 @@ object Talker {
                                             val channel =
                                                 TalkerSdkBackgroundService.database.roomDao()
                                                     .getChannelById(addedUser.channel_id)
-                                                    .firstOrNull()
                                             channel?.let {
                                                 val updatedParticipants =
                                                     it.participants.toMutableList()
@@ -1292,7 +1284,6 @@ object Talker {
                                             val channel =
                                                 TalkerSdkBackgroundService.database.roomDao()
                                                     .getChannelById(addedUser.channel_id)
-                                                    .firstOrNull()
                                             channel?.let {
                                                 val updatedParticipants =
                                                     it.participants.toMutableList()
@@ -1348,7 +1339,7 @@ object Talker {
                                     )?.let { newAdmin ->
                                         CoroutineScope(Dispatchers.Main).launch {
                                             val channel = TalkerSdkBackgroundService.database.roomDao()
-                                                .getChannelById(newAdmin.channel_id).firstOrNull()
+                                                .getChannelById(newAdmin.channel_id)
                                             channel?.let {
                                                 val updatedParticipants =
                                                     it.participants.map { participant ->
@@ -1375,7 +1366,7 @@ object Talker {
                                     channelObj.let { newAdmin ->
                                         CoroutineScope(Dispatchers.Main).launch {
                                             val channel = TalkerSdkBackgroundService.database.roomDao()
-                                                .getChannelById(newAdmin.channel_id).firstOrNull()
+                                                .getChannelById(newAdmin.channel_id)
                                             channel?.let {
                                                 val updatedParticipants =
                                                     it.participants.map { participant ->
@@ -1406,7 +1397,6 @@ object Talker {
                                         CoroutineScope(Dispatchers.Main).launch {
                                             val channel = TalkerSdkBackgroundService.database.roomDao()
                                                 .getChannelById(removedAdmin.channel_id)
-                                                .firstOrNull()
                                             channel?.let {
                                                 val updatedParticipants =
                                                     it.participants.map { participant ->
@@ -1434,7 +1424,6 @@ object Talker {
                                         CoroutineScope(Dispatchers.Main).launch {
                                             val channel = TalkerSdkBackgroundService.database.roomDao()
                                                 .getChannelById(removedAdmin.channel_id)
-                                                .firstOrNull()
                                             channel?.let {
                                                 val updatedParticipants =
                                                     it.participants.map { participant ->
@@ -1462,6 +1451,10 @@ object Talker {
                                     intent.getSerializableExtra(
                                         "ptt_audio", AudioData::class.java
                                     )?.let { audioData ->
+                                        Log.d(
+                                            "audioData",
+                                            "audioData : $audioData"
+                                        )
                                         CoroutineScope(Dispatchers.Main).launch {
                                             eventListener.currentPttAudio?.invoke(
                                                 audioData
@@ -1473,6 +1466,10 @@ object Talker {
                                         "ptt_audio"
                                     ) as AudioData
                                     channelObj.let { audioData ->
+                                        Log.d(
+                                            "audioData",
+                                            "audioData : $audioData"
+                                        )
                                         CoroutineScope(Dispatchers.Main).launch {
                                             CoroutineScope(Dispatchers.Main).launch {
                                                 eventListener.currentPttAudio?.invoke(

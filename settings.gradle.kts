@@ -16,7 +16,7 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        jcenter()
+        maven { setUrl("https://raw.githubusercontent.com/alexgreench/google-webrtc/master") }
     }
 }
 

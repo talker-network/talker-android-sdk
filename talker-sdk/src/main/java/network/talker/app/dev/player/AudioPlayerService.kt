@@ -24,6 +24,8 @@ import androidx.media3.exoplayer.hls.HlsMediaSource
 import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import network.talker.app.dev.LOG_TAG
 import network.talker.app.dev.R
@@ -75,10 +77,10 @@ class AudioPlayerService : Service() {
                     "channel_id",
                     "channel_id : $channelId"
                 )
-                Log.d(
-                    "audioModel",
-                    "audioModel : $audioModel"
-                )
+//                Log.d(
+//                    "audioModel",
+//                    "audioModel : $audioModel"
+//                )
                 if (audioModel != null) {
                     liveMsgQue[channelId] = liveMsgQue.getOrDefault(channelId, arrayOf()) + audioModel
                     liveMsgPrty.add(channelId)
@@ -174,25 +176,31 @@ class AudioPlayerService : Service() {
                     }
                 }
             })
-            sendBroadcast(
-                Intent()
-                    .setPackage(packageName)
-                    .setAction("com.talker.sdk")
-                    .apply {
-                        putExtra("action", "CURRENT_PTT_AUDIO")
-                        putExtra("message", "Current PTT audio playing.")
-                        putExtra(
-                            "channel_obj", Gson().toJson(
-                                AudioData(
+            CoroutineScope(Dispatchers.IO).launch {
+                sendBroadcast(
+                    Intent()
+                        .setPackage(packageName)
+                        .setAction("com.talker.sdk")
+                        .apply {
+                            putExtra("action", "CURRENT_PTT_AUDIO")
+                            putExtra("message", "Current PTT audio playing.")
+                            putExtra(
+                                "ptt_audio", AudioData(
                                     currentLiveMessage?.sender_id ?: "",
                                     currentLiveMessage?.channel_id ?: "",
-                                    currentLiveMessage?.group_name ?: "",
-                                    currentLiveMessage?.sender_name ?: ""
+                                    (currentLiveMessage?.group_name ?: "").ifEmpty {
+                                        TalkerSdkBackgroundService.database.roomDao().getChannelById(channelId = (currentLiveMessage?.channel_id ?: ""))?.group_name ?: ""
+                                    },
+                                    (currentLiveMessage?.sender_name ?: "").ifEmpty {
+                                        TalkerSdkBackgroundService.database.roomDao().getUserById(
+                                            currentLiveMessage?.sender_id ?: ""
+                                        )?.name ?: ""
+                                    }
                                 )
                             )
-                        )
-                    }
-            )
+                        }
+                )
+            }
             val hlsUri = Uri.parse(currentLiveMessage!!.media_link)
             val dataSourceFactory = DefaultHttpDataSource.Factory()
             val hlsMediaSource = HlsMediaSource.Factory(dataSourceFactory).createMediaSource(

@@ -55,6 +55,7 @@ import androidx.compose.ui.window.DialogProperties
 import network.talker.app.dev.webrtc.AudioStatus
 import network.talker.app.dev.webrtc.ServerConnectionState
 import network.talker.app.dev.Talker
+import network.talker.app.dev.model.AudioData
 import network.talker.app.dev.networking.data.Channel
 import network.talker.app.dev.networking.data.GetAllUserModelData
 
@@ -232,7 +233,9 @@ fun DoubleButtonSample(fcmToken: String) {
                     var isDropDownExpanded by rememberSaveable {
                         mutableStateOf(false)
                     }
-
+                    var currentSpeaking by remember {
+                        mutableStateOf("")
+                    }
                     // will store the current channel
                     var selectedChannel by rememberSaveable {
                         mutableStateOf(channels.getOrNull(0) ?: Channel())
@@ -250,7 +253,6 @@ fun DoubleButtonSample(fcmToken: String) {
                         }
                     }
 
-
                     // when you are removed from channel or any other person is removed from channel.
                     Talker.eventListener.onUserRemovedFromChannel = { removedUser ->
                         // if the user that is removed is nothing but me than
@@ -261,10 +263,14 @@ fun DoubleButtonSample(fcmToken: String) {
                         }
                     }
 
+                    Talker.eventListener.currentPttAudio = { data: AudioData ->
+                        currentSpeaking = data.SenderName
+                    }
 
                     Text(text = "Audio Status : $status")
-
-                    Spacer(modifier = Modifier.height(50.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Text(text = "Current Speaking : $currentSpeaking")
+                    Spacer(modifier = Modifier.height(20.dp))
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically

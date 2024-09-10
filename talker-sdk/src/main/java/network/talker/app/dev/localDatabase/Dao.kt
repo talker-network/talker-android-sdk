@@ -25,7 +25,7 @@ interface Dao {
     fun getAllChannels(): Flow<List<Channel>>
 
     @Query("SELECT * FROM channels WHERE channel_id = :channelId")
-    fun getChannelById(channelId: String): Flow<Channel?>
+    fun getChannelById(channelId: String) : Channel?
 
     @Query("DELETE FROM channels")
     suspend fun clearChannels()
@@ -35,6 +35,9 @@ interface Dao {
 
     @Query("SELECT * FROM user_table WHERE user_id != :excludedUserId ORDER BY name ASC")
     fun getAllUsersExcept(excludedUserId: String): Flow<List<GetAllUserModelData>>
+
+    @Query("SELECT * FROM user_table WHERE user_id = :userId")
+    fun getUserById(userId: String) : GetAllUserModelData?
 
     @Query("DELETE FROM user_table")
     suspend fun clearUsers()

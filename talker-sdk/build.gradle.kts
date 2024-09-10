@@ -45,7 +45,7 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1")
 
-    implementation("org.webrtc:google-webrtc:1.0.32006")
+    implementation("org.webrtc:google-webrtc:1.0.+")
     implementation("org.awaitility:awaitility:4.2.0")
 
     val aws_version = "2.75.0"
