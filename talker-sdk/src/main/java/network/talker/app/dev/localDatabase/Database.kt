@@ -7,7 +7,7 @@ import network.talker.app.dev.networking.data.Channel
 import network.talker.app.dev.networking.data.Converters
 import network.talker.app.dev.networking.data.GetAllUserModelData
 
-@Database(entities = [GetAllUserModelData::class, Channel::class], version = 1)
+@Database(entities = [GetAllUserModelData::class, Channel::class], version = 1, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class Database : RoomDatabase() {
     abstract fun roomDao(): Dao

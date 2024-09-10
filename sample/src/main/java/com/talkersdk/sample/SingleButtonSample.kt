@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -155,63 +156,20 @@ fun SingleButtonSample(fcmToken: String) {
                 // if peer connection is not successful means that either it is failed or it is disconnected
                 // in such case show create user button
                 if (!showPushToTalkButton) {
-                    if (Talker.getCurrentUserId(context).isEmpty()) {
-                        var name by remember {
-                            mutableStateOf("")
-                        }
-                        OutlinedTextField(value = name, onValueChange = { name = it })
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Button(onClick = {
-                            // check if name is not empty
-                            if (name.isNotEmpty()) {
-                                status = ""
-                                // start showing loader
-                                isLoading = true
-                                // create user and connect to peer and pass the listener and fcm token
-                                Talker.createUser(
-                                    context,
-                                    name,
-                                    fcmToken,
-//                                    eventListener,
-                                    onSuccess = {
-                                        Toast.makeText(context, "Success", Toast.LENGTH_SHORT)
-                                            .show()
-                                        Log.d(
-                                            "Talker SDK",
-                                            "registrationState : Success} message : $it"
-                                        )
-                                    },
-                                    onFailure = {
-                                        showPushToTalkButton = false
-                                        isLoading = false
-                                        Toast.makeText(context, "Failure", Toast.LENGTH_SHORT)
-                                            .show()
-                                        Log.d(
-                                            "Talker SDK",
-                                            "registrationState : Failure message : $it"
-                                        )
-                                    }
-                                )
-                            }
-                        }) {
-                            Text(text = "Create")
-                        }
-                    } else {
-                        var userName by remember {
+                    if (Talker.getCurrentUserId(context).isNotEmpty()) {
+                        val userId by remember {
                             mutableStateOf(Talker.getCurrentUserId(context))
                         }
-                        OutlinedTextField(value = userName, onValueChange = { userName = it })
-                        Spacer(modifier = Modifier.height(20.dp))
                         Button(onClick = {
                             // check if name is not empty
-                            if (userName.isNotEmpty()) {
+                            if (userId.isNotEmpty()) {
                                 status = ""
                                 // start showing loader
                                 isLoading = true
                                 // create user and connect to peer and pass the listener and fcm token
                                 Talker.setUser(
                                     context,
-                                    userName,
+                                    userId,
                                     fcmToken,
 //                                    eventListener,
                                     onSuccess = {
@@ -235,8 +193,56 @@ fun SingleButtonSample(fcmToken: String) {
                                 )
                             }
                         }) {
-                            Text(text = "Login")
+                            Text(text = "Re-Login")
                         }
+                        Spacer(modifier = Modifier.height(50.dp))
+                    }
+                    var name by remember {
+                        mutableStateOf("")
+                    }
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        singleLine = true,
+                        label = {
+                            Text(text = "Name")
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Button(onClick = {
+                        // check if name is not empty
+                        if (name.isNotEmpty()) {
+                            status = ""
+                            // start showing loader
+                            isLoading = true
+                            // create user and connect to peer and pass the listener and fcm token
+                            Talker.createUser(
+                                context,
+                                name,
+                                fcmToken,
+//                                    eventListener,
+                                onSuccess = {
+                                    Toast.makeText(context, "Success", Toast.LENGTH_SHORT)
+                                        .show()
+                                    Log.d(
+                                        "Talker SDK",
+                                        "registrationState : Success} message : $it"
+                                    )
+                                },
+                                onFailure = {
+                                    showPushToTalkButton = false
+                                    isLoading = false
+                                    Toast.makeText(context, "Failure", Toast.LENGTH_SHORT)
+                                        .show()
+                                    Log.d(
+                                        "Talker SDK",
+                                        "registrationState : Failure message : $it"
+                                    )
+                                }
+                            )
+                        }
+                    }) {
+                        Text(text = "Create")
                     }
                 } else {
                     val interactionSource = remember {
@@ -337,17 +343,34 @@ fun SingleButtonSample(fcmToken: String) {
                         Text(text = "Push to talk")
                     }
                     Spacer(modifier = Modifier.height(50.dp))
-                    Button(
-                        onClick = {
-                            isLoading = true
-                            // close the connection and logout the user.
-                            // also don't forget to call this method in onDestroy() or current activity.
-                            // it will prevent data leaks
-                            Talker.closeConnection()
-                        },
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Text(text = "Stop / Logout")
+                    Row {
+                        Button(
+                            onClick = {
+                                isLoading = true
+                                // close the connection and logout the user.
+                                // also don't forget to call this method in onDestroy() or current activity.
+                                // it will prevent data leaks
+                                Talker.closeConnection()
+                            },
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Text(text = "Disconnect")
+                        }
+
+                        Spacer(modifier = Modifier.width(25.dp))
+
+                        Button(
+                            onClick = {
+                                isLoading = true
+                                // close the connection and logout the user.
+                                // also don't forget to call this method in onDestroy() or current activity.
+                                // it will prevent data leaks
+                                Talker.logoutUser()
+                            },
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Text(text = "Logout")
+                        }
                     }
                     Spacer(modifier = Modifier.height(50.dp))
                     Box(

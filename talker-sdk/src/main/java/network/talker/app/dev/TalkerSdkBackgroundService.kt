@@ -28,7 +28,7 @@ internal class TalkerSdkBackgroundService : Application() {
             applicationContext,
             Database::class.java,
             "talker_database"
-        ).build()
+        ).allowMainThreadQueries().build()
         initializeMobileClient(auth, applicationContext)
         val serviceIntent = Intent(this, AudioPlayerService::class.java)
         startForegroundService(serviceIntent)

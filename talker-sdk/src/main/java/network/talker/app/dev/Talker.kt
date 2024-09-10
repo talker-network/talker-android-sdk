@@ -24,6 +24,7 @@ import androidx.work.WorkerParameters
 import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.mobile.auth.core.internal.util.ThreadUtils.runOnUiThread
 import com.amazonaws.mobile.client.Callback
+import com.amazonaws.mobile.client.SignOutOptions
 import com.amazonaws.mobile.client.results.SignInResult
 import com.amazonaws.services.kinesisvideo.model.ChannelRole
 import com.amazonaws.services.kinesisvideo.model.ResourceEndpointListItem
@@ -192,9 +193,11 @@ object Talker {
         hasToRetry = false
         isFirstTime = true
         val sharedPreference = SharedPreference(context)
-        getAllUsersInternal(
-            onFailure
-        )
+        CoroutineScope(Dispatchers.Main).launch {
+            TalkerSdkBackgroundService.database.roomDao().clearUsers()
+            TalkerSdkBackgroundService.database.roomDao().clearChannels()
+            getAllUsersInternal(onFailure)
+        }
         sdkCreateUser(context, name = name, onSuccess = { res ->
             sharedPreference.setUserData(res.data)
             getChannelListInternal(
@@ -701,18 +704,72 @@ object Talker {
                                 "Connection closed"
                             )
                         }
-//                        logoutUser(
-//                            onLogoutSuccess = {
-//                                val sharedPreference = SharedPreference(applicationContext)
-//                                sharedPreference.clearPreference()
-//                                CoroutineScope(Dispatchers.Main).launch {
-//                                    sendBroadCast(
-//                                        "CONNECTION_CLOSED",
-//                                        "Connection closed"
-//                                    )
-//                                }
-//                            }
-//                        )
+                        return Result.success()
+                    }
+                }
+                try {
+                    val workRequestBuilder = OneTimeWorkRequestBuilder<MyWorker>()
+                        .build()
+                    applicationContext?.let {
+                        WorkManager.getInstance(it).enqueue(workRequestBuilder)
+                    }
+                } catch (e: Exception) {
+                    if (TalkerGlobalVariables.printLogs) {
+                        Log.e(LOG_TAG, "Error while closing and disposing localPeer", e)
+                    }
+                }
+
+            }
+        }
+    }
+
+    fun logoutUser() {
+        runOnUiThread {
+            synchronized(this) {
+                hasStartedTalking = false
+                validateSDKKey()
+                class MyWorker(context: Context, workerParameters: WorkerParameters) :
+                    Worker(context, workerParameters) {
+                    override fun doWork(): Result {
+                        SocketHandler.broadCastStop(mChannelId)
+                        SocketHandler.closeConnection()
+                        audioManager?.mode = originalAudioMode
+                        audioManager?.isSpeakerphoneOn = originalSpeakerphoneOn
+                        pendingIceCandidatesMap.clear()
+                        peerConnectionFoundMap.clear()
+                        peerConnectionFoundMap.clear()
+                        pendingIceCandidatesMap.clear()
+                        createLocalPeerConnection?.closeAll()
+                        localPeer?.let {
+                            it.close()
+                            it.dispose()
+                            localPeer = null
+                        }
+                        client?.disconnect()
+                        client = null
+                        TalkerSdkBackgroundService().auth.signOut(
+                            SignOutOptions.builder().signOutGlobally(true).build(),
+                            object : Callback<Void> {
+                                override fun onResult(result: Void?) {
+                                    CoroutineScope(Dispatchers.Main).launch {
+                                        sendBroadCast(
+                                            "CONNECTION_CLOSED",
+                                            "Connection closed"
+                                        )
+                                    }
+                                }
+
+                                override fun onError(e: java.lang.Exception?) {
+                                    CoroutineScope(Dispatchers.Main).launch {
+                                        sendBroadCast(
+                                            "CONNECTION_CLOSED",
+                                            "Connection closed"
+                                        )
+                                    }
+                                }
+
+                            }
+                        )
                         return Result.success()
                     }
                 }
