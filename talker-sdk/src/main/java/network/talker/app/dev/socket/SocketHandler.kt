@@ -43,7 +43,6 @@ internal object SocketHandler {
                         forceNew = true
                         reconnection = true
                         transports = arrayOf("websocket")
-
                     }
             )
             socket = socketManager.socket(
@@ -85,24 +84,20 @@ internal object SocketHandler {
         socket?.on(
             Socket.EVENT_CONNECT_ERROR
         ) {
-            context.sendBroadcast(
-                Intent()
-                    .setPackage(context.packageName)
-                    .setAction("com.talker.sdk")
-                    .apply {
-                        putExtra("action", "CONNECTION_FAILURE")
-                        putExtra("message", "Websocket connection error")
-                        putExtra(
-                            "failure_from", "SOCKET"
-                        )
-                    }
-            )
+//            context.sendBroadcast(
+//                Intent()
+//                    .setPackage(context.packageName)
+//                    .setAction("com.talker.sdk")
+//                    .apply {
+//                        putExtra("action", "CONNECTION_FAILURE")
+//                        putExtra("message", "Websocket connection error")
+//                        putExtra(
+//                            "failure_from", "SOCKET"
+//                        )
+//                    }
+//            )
             Log.d(LOG_TAG, "Socket EVENT_CONNECT_ERROR")
         }
-
-//        socket!!.on("event_name") { // Acknowledge the event
-//            socket!!.ack("event_name", "ack_data")
-//        }
         socket?.on(
             "broadcast_start"
         ) { args ->

@@ -17,10 +17,12 @@ import android.os.Looper
 import android.util.Base64
 import android.util.Log
 import android.widget.Toast
+import androidx.work.Constraints
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import androidx.work.await
 import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.mobile.auth.core.internal.util.ThreadUtils.runOnUiThread
 import com.amazonaws.mobile.client.Callback
@@ -965,6 +967,14 @@ object Talker {
         }
     }
 
+//    private class MyWorker(context: Context, workerParameters: WorkerParameters) :
+//        Worker(context, workerParameters) {
+//        override fun doWork(): Result {
+//
+//            return Result.success()
+//        }
+//    }
+
     // close everything....
     private fun closeConnectionForRetry(
         onComplete: () -> Unit
@@ -973,35 +983,38 @@ object Talker {
             synchronized(this) {
                 hasStartedTalking = false
                 validateSDKKey()
-                class MyWorker(context: Context, workerParameters: WorkerParameters) :
-                    Worker(context, workerParameters) {
-                    override fun doWork(): Result {
-                        SocketHandler.broadCastStop(mChannelId)
-                        SocketHandler.closeConnection()
-                        audioManager?.mode = originalAudioMode
-                        audioManager?.isSpeakerphoneOn = originalSpeakerphoneOn
-                        pendingIceCandidatesMap.clear()
-                        peerConnectionFoundMap.clear()
-                        peerConnectionFoundMap.clear()
-                        pendingIceCandidatesMap.clear()
-                        createLocalPeerConnection?.closeAll()
-                        localPeer?.let {
-                            it.close()
-                            it.dispose()
-                            localPeer = null
-                        }
-                        client?.disconnect()
-                        client = null
-                        onComplete()
-                        return Result.success()
-                    }
-                }
+
                 try {
-                    val workRequestBuilder = OneTimeWorkRequestBuilder<MyWorker>()
-                        .build()
-                    applicationContext?.let {
-                        WorkManager.getInstance(it).enqueue(workRequestBuilder)
+                    SocketHandler.broadCastStop(mChannelId)
+                    SocketHandler.closeConnection()
+                    audioManager?.mode = originalAudioMode
+                    audioManager?.isSpeakerphoneOn = originalSpeakerphoneOn
+                    pendingIceCandidatesMap.clear()
+                    peerConnectionFoundMap.clear()
+                    peerConnectionFoundMap.clear()
+                    pendingIceCandidatesMap.clear()
+                    createLocalPeerConnection?.closeAll()
+                    localPeer?.let {
+                        it.close()
+                        it.dispose()
+                        localPeer = null
                     }
+                    client?.disconnect()
+                    client = null
+                    onComplete()
+//                    val workRequestBuilder = OneTimeWorkRequestBuilder<MyWorker>()
+//                        .setConstraints(
+//                            Constraints.NONE
+//                        )
+//                        .build()
+//                    applicationContext?.let {
+//                        val result = WorkManager.getInstance(it).enqueue(workRequestBuilder).result
+//                        if (result.isDone) {
+//                            onComplete()
+//                        }else{
+//                            onComplete()
+//                        }
+//                    }
                 } catch (e: Exception) {
                     if (TalkerGlobalVariables.printLogs) {
                         Log.e(LOG_TAG, "Error while closing and disposing localPeer", e)
@@ -1096,22 +1109,22 @@ object Talker {
                                                 )
                                             }
                                             closeConnectionForRetry {
-                                                if (failureFrom == "WEBRTC") {
+//                                                if (failureFrom == "WEBRTC") {
                                                     establishConnection(
                                                         applicationContext,
                                                         channelName,
                                                         region
                                                     )
-                                                }
-                                                if (failureFrom == "SOCKET") {
-                                                    SocketHandler.setSocket(
-                                                        sharedPreference.getUserData().user_auth_token,
-                                                        applicationContext
-                                                    )
-                                                    SocketHandler.establishConnection(
-                                                        applicationContext
-                                                    )
-                                                }
+//                                                }
+//                                                if (failureFrom == "SOCKET") {
+//                                                    SocketHandler.setSocket(
+//                                                        sharedPreference.getUserData().user_auth_token,
+//                                                        applicationContext
+//                                                    )
+//                                                    SocketHandler.establishConnection(
+//                                                        applicationContext
+//                                                    )
+//                                                }
                                             }
                                         } else {
                                             eventListener.onServerConnectionChange?.invoke(

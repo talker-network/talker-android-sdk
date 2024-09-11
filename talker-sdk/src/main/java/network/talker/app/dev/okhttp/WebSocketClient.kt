@@ -15,12 +15,14 @@ import kotlin.concurrent.Volatile
 /**
  * An OkHttp based WebSocket client.
  */
-internal class WebSocketClient(uri: String, signalingListener: SignalingListener) {
-    private val webSocket: WebSocket
+internal class WebSocketClient(val uri: String, val signalingListener: SignalingListener) {
+    private lateinit var webSocket: WebSocket
     @Volatile
     var isOpen: Boolean = false
 
-    init {
+    fun initializeClient(
+        onInitialized : () -> Unit = {}
+    ) {
         val client: OkHttpClient = OkHttpClient.Builder().build()
 
         val userAgent: String =
@@ -35,6 +37,7 @@ internal class WebSocketClient(uri: String, signalingListener: SignalingListener
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.d(LOG_TAG, "WebSocket connection opened")
                 isOpen = true
+                onInitialized()
             }
 
             override fun onMessage(webSocket: WebSocket, message: String) {
@@ -59,6 +62,10 @@ internal class WebSocketClient(uri: String, signalingListener: SignalingListener
             .until { this@WebSocketClient.isOpen }
     }
 
+    init {
+        initializeClient()
+    }
+
     fun send(message: String) {
         if (isOpen) {
             if (webSocket.send(message)) {
@@ -70,7 +77,16 @@ internal class WebSocketClient(uri: String, signalingListener: SignalingListener
                 )
             }
         } else {
-            Log.d(LOG_TAG, "Cannot send the websocket message as it is not open.")
+            initializeClient(){
+                if (webSocket.send(message)) {
+                    Log.d(LOG_TAG, "Successfully sent $message")
+                } else {
+                    Log.d(
+                        LOG_TAG,
+                        "Could not send $message as the connection may have closing, closed, or canceled."
+                    )
+                }
+            }
         }
     }
 
