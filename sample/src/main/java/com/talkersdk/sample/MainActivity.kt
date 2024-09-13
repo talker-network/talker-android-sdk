@@ -32,7 +32,6 @@ class MainActivity : ComponentActivity() {
 
 
         setContent {
-
             var fcmToken by remember {
                 mutableStateOf("")
             }

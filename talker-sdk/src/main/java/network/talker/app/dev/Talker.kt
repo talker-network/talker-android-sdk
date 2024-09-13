@@ -343,6 +343,18 @@ object Talker {
         return sharedPreference.getUserData().user_id
     }
 
+    /**
+     * Get the current logged in user's data
+     *
+     * @return Returns a Pair<String, String> where first parameter gives the userId and second gives the name.
+     */
+    fun getCurrentUser(context: Context) : Pair<String, String> {
+        val sharedPreference = SharedPreference(context)
+        return Pair(sharedPreference.getUserData().user_id, sharedPreference.getUserData().name)
+    }
+
+
+
     // call this function to edit the channel's name
     // this function will call the api for changing the name
     // and also it will update the local databse as well.
@@ -2057,10 +2069,11 @@ object Talker {
     }
 
     private fun stopRecording() {
-        setupAudioRecorder()
-        isRecording = false
-        audioRecord.stop()
-        audioRecord.release()
+        if (::audioRecord.isInitialized && isRecording) {
+            isRecording = false
+            audioRecord.stop()
+            audioRecord.release()
+        }
     }
 
     @Throws(IOException::class)
