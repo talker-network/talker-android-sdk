@@ -57,7 +57,7 @@ import network.talker.app.dev.webrtc.ServerConnectionState
 import network.talker.app.dev.Talker
 import network.talker.app.dev.model.AudioData
 import network.talker.app.dev.networking.data.Channel
-import network.talker.app.dev.networking.data.GetAllUserModelData
+import network.talker.app.dev.networking.data.UserModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -239,7 +239,7 @@ fun DoubleButtonSample(fcmToken: String) {
                     }
                     // current user
                     var selectedUser by remember {
-                        mutableStateOf<GetAllUserModelData?>(null)
+                        mutableStateOf<UserModel?>(null)
                     }
 
                     Talker.eventListener.onChannelUpdated = { updatedChannel ->

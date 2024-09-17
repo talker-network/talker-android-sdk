@@ -53,15 +53,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import network.talker.app.dev.Talker
 import network.talker.app.dev.model.AudioData
 import network.talker.app.dev.networking.data.Channel
-import network.talker.app.dev.networking.data.GetAllUserModelData
+import network.talker.app.dev.networking.data.UserModel
 import network.talker.app.dev.webrtc.AudioStatus
 import network.talker.app.dev.webrtc.ServerConnectionState
+import java.time.Instant
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,6 +73,9 @@ fun SingleButtonSample(fcmToken: String) {
         mutableStateOf(false)
     }
     var status by remember {
+        mutableStateOf("")
+    }
+    var internetStatus by remember {
         mutableStateOf("")
     }
     var showPushToTalkButton by rememberSaveable {
@@ -90,6 +95,7 @@ fun SingleButtonSample(fcmToken: String) {
         { serverConnectionState: ServerConnectionState, message: String ->
             isLoading = false
             Toast.makeText(context, serverConnectionState.name, Toast.LENGTH_SHORT).show()
+            internetStatus=serverConnectionState.name
             Log.d(
                 "Talker SDK",
                 "peerConnectionState : ${serverConnectionState.name} ${
@@ -258,7 +264,7 @@ fun SingleButtonSample(fcmToken: String) {
                     }
                     // current user
                     var selectedUser by remember {
-                        mutableStateOf<GetAllUserModelData?>(null)
+                        mutableStateOf<UserModel?>(null)
                     }
                     var currentSpeaking by remember {
                         mutableStateOf("")
@@ -270,6 +276,10 @@ fun SingleButtonSample(fcmToken: String) {
                                 group_name = updatedChannel.new_name
                             )
                         }
+                    }
+                    Talker.eventListener.onNewChannel = { newChannel ->
+
+                        Log.d("NEW CHANNEL" , newChannel.toString());
                     }
 
 
@@ -293,10 +303,12 @@ fun SingleButtonSample(fcmToken: String) {
 
                     Talker.eventListener.currentPttAudio = { data: AudioData ->
                         currentSpeaking = data.SenderName
+                        Log.d("Talker sdk",data.toString());
                     }
 
                     LaunchedEffect(key1 = interactionSource) {
-                        interactionSource.interactions.collect() {
+                        interactionSource.interactions.collect()
+                        {
                             when (it) {
                                 is PressInteraction.Press -> {
                                     // when user presses the button call this function to start sharing audio
@@ -326,8 +338,14 @@ fun SingleButtonSample(fcmToken: String) {
                             }
                         }
                     }
+                   
+                    Text(text="Current Username : ${Talker.getCurrentUser(context).name}", textAlign = TextAlign.Left  )
+                    Text(text="Current UserId : ${Talker.getCurrentUser(context).user_id}", textAlign = TextAlign.Left )
 
-                    Text(text = "Audio Status : $status")
+                    Text(text = "Server Connection Status : $internetStatus")
+
+                    
+                    Text(text = "Audio Sending Status : $status")
 
                     Spacer(modifier = Modifier.height(20.dp))
 

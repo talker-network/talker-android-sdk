@@ -20,7 +20,7 @@ import network.talker.app.dev.networking.data.AddNewAdminModelData
 import network.talker.app.dev.networking.data.AddNewParticipantModelData
 import network.talker.app.dev.networking.data.AdminRemoveModelData
 import network.talker.app.dev.networking.data.Channel
-import network.talker.app.dev.networking.data.GetAllUserModelData
+import network.talker.app.dev.networking.data.UserModel
 import network.talker.app.dev.networking.data.RemoveParticipantModelData
 import network.talker.app.dev.networking.data.UpdateChannelNameModelData
 import network.talker.app.dev.sharedPreference.SharedPreference
@@ -359,7 +359,7 @@ internal object SocketHandler {
                                         putExtra(
                                             "channel_obj", Gson().fromJson(
                                                 arg,
-                                                GetAllUserModelData::class.java
+                                                UserModel::class.java
                                             )
                                         )
                                     }

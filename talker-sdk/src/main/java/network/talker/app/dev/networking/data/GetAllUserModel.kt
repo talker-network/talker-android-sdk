@@ -5,12 +5,12 @@ import androidx.room.PrimaryKey
 import java.io.Serializable
 
 data class GetAllUserModel(
-    val data: List<GetAllUserModelData> = emptyList(),
+    val data: List<UserModel> = emptyList(),
     val success: Boolean = false
 )
 
 @Entity(tableName = "user_table")
-data class GetAllUserModelData(
+data class UserModel(
     val name: String = "",
     @PrimaryKey(autoGenerate = false)
     val user_id: String = ""

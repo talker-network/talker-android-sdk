@@ -7,7 +7,7 @@ import androidx.room.Query
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 import network.talker.app.dev.networking.data.Channel
-import network.talker.app.dev.networking.data.GetAllUserModelData
+import network.talker.app.dev.networking.data.UserModel
 
 @Dao
 interface Dao {
@@ -30,14 +30,14 @@ interface Dao {
     @Query("DELETE FROM channels")
     suspend fun clearChannels()
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE, entity = GetAllUserModelData::class)
-    suspend fun insertUsers(users: List<GetAllUserModelData>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE, entity = UserModel::class)
+    suspend fun insertUsers(users: List<UserModel>)
 
     @Query("SELECT * FROM user_table WHERE user_id != :excludedUserId ORDER BY name ASC")
-    fun getAllUsersExcept(excludedUserId: String): Flow<List<GetAllUserModelData>>
+    fun getAllUsersExcept(excludedUserId: String): Flow<List<UserModel>>
 
     @Query("SELECT * FROM user_table WHERE user_id = :userId")
-    fun getUserById(userId: String) : GetAllUserModelData?
+    fun getUserById(userId: String) : UserModel?
 
     @Query("DELETE FROM user_table")
     suspend fun clearUsers()

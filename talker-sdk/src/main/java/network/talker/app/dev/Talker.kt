@@ -55,7 +55,7 @@ import network.talker.app.dev.networking.data.AddNewParticipantModelData
 import network.talker.app.dev.networking.data.AdminRemoveModelData
 import network.talker.app.dev.networking.data.Channel
 import network.talker.app.dev.networking.data.CreateChannelModel
-import network.talker.app.dev.networking.data.GetAllUserModelData
+import network.talker.app.dev.networking.data.UserModel
 import network.talker.app.dev.networking.data.RemoveParticipantModelData
 import network.talker.app.dev.networking.data.UpdateChannelNameModelData
 import network.talker.app.dev.okhttp.SignalingListener
@@ -149,7 +149,7 @@ object Talker {
         var onChannelUpdated: ((data: UpdateChannelNameModelData) -> Unit)? = null
         var onUserRemovedFromChannel: ((data: RemoveParticipantModelData) -> Unit)? = null
         var onAddedUserInChannel: ((data: AddNewParticipantModelData) -> Unit)? = null
-        var onNewSdkUser: ((data: GetAllUserModelData) -> Unit)? = null
+        var onNewSdkUser: ((data: UserModel) -> Unit)? = null
         var onAdminAdded: ((data: AddNewAdminModelData) -> Unit)? = null
         var onAdminRemoved: ((data: AdminRemoveModelData) -> Unit)? = null
         var currentPttAudio : ((data: AudioData) -> Unit)? = null
@@ -333,7 +333,7 @@ object Talker {
 
     // this function will return the user's list that exists in the application.
     // this will exclude the current logged in user.
-    fun getAllUsers(): kotlinx.coroutines.flow.Flow<List<GetAllUserModelData>> =
+    fun getAllUsers(): kotlinx.coroutines.flow.Flow<List<UserModel>> =
         TalkerSdkBackgroundService.database.roomDao().getAllUsersExcept(
             SharedPreference(TalkerSdkBackgroundService.talkerApplicationContext).getUserData().user_id
         )
@@ -348,9 +348,10 @@ object Talker {
      *
      * @return Returns a Pair<String, String> where first parameter gives the userId and second gives the name.
      */
-    fun getCurrentUser(context: Context) : Pair<String, String> {
+    fun getCurrentUser(context: Context) : UserModel {
         val sharedPreference = SharedPreference(context)
-        return Pair(sharedPreference.getUserData().user_id, sharedPreference.getUserData().name)
+        val currentUserData=sharedPreference.getUserData()
+        return  UserModel(user_id = currentUserData.user_id, name = currentUserData.name)
     }
 
 
@@ -1386,7 +1387,7 @@ object Talker {
                             "NEW_SDK_USER" -> {
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                     intent.getSerializableExtra(
-                                        "channel_obj", GetAllUserModelData::class.java
+                                        "channel_obj", UserModel::class.java
                                     )?.let { newUser ->
                                         CoroutineScope(Dispatchers.Main).launch {
                                             TalkerSdkBackgroundService.database.roomDao().insertUsers(
@@ -1400,7 +1401,7 @@ object Talker {
                                 } else {
                                     val channelObj = intent.getSerializableExtra(
                                         "channel_obj"
-                                    ) as GetAllUserModelData
+                                    ) as UserModel
                                     channelObj.let { newUser ->
                                         CoroutineScope(Dispatchers.Main).launch {
                                             TalkerSdkBackgroundService.database.roomDao().insertUsers(
