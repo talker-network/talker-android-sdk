@@ -1,8 +1,6 @@
 package com.talkersdk.sample
 
 import android.Manifest
-import android.app.NotificationManager
-import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -18,7 +16,7 @@ import androidx.compose.runtime.setValue
 import com.google.firebase.messaging.FirebaseMessaging
 import com.talkersdk.sample.constants.Constants
 import com.talkersdk.sample.ui.theme.TalkerSDKTheme
-import network.talker.app.dev.Talker
+import network.talker.sdk.Talker
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "network.talker.app.dev"
+    namespace = "network.talker.sdk"
     compileSdk = 34
 
     defaultConfig {
