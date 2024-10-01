@@ -52,12 +52,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
-import network.talker.sdk.webrtc.AudioStatus
-import network.talker.sdk.webrtc.ServerConnectionState
-import network.talker.sdk.Talker
-import network.talker.sdk.model.AudioData
-import network.talker.sdk.networking.data.Channel
-import network.talker.sdk.networking.data.UserModel
+import network.talker.app.dev.webrtc.AudioStatus
+import network.talker.app.dev.webrtc.ServerConnectionState
+import network.talker.app.dev.Talker
+import network.talker.app.dev.model.AudioData
+import network.talker.app.dev.networking.data.Channel
+import network.talker.app.dev.networking.data.GetAllUserModelData
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -239,7 +239,7 @@ fun DoubleButtonSample(fcmToken: String) {
                     }
                     // current user
                     var selectedUser by remember {
-                        mutableStateOf<UserModel?>(null)
+                        mutableStateOf<GetAllUserModelData?>(null)
                     }
 
                     Talker.eventListener.onChannelUpdated = { updatedChannel ->

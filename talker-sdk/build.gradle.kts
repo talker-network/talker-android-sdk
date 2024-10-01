@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "network.talker.sdk"
+    namespace = "network.talker.app.dev"
     compileSdk = 34
 
     defaultConfig {
@@ -40,13 +40,13 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 
-    implementation("androidx.media3:media3-exoplayer-hls:1.3.1")
-    implementation("androidx.media3:media3-exoplayer:1.3.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
+    implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1")
 
     implementation("org.webrtc:google-webrtc:1.0.+")
-    implementation("org.awaitility:awaitility:4.2.0")
+    implementation("org.awaitility:awaitility:4.2.2")
 
     val aws_version = "2.75.0"
     implementation("com.amazonaws:aws-android-sdk-kinesisvideo:$aws_version")

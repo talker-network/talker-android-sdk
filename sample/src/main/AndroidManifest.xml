@@ -48,7 +48,7 @@
         </service>
 
         <!--        service that will actually play the audio file in the background-->
-        <service android:name="network.talker.sdk.player.AudioPlayerService"
+        <service android:name="network.talker.app.dev.player.AudioPlayerService"
             android:exported="false"
             android:foregroundServiceType="specialUse"
             android:label="@string/app_name"

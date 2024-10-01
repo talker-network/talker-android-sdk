@@ -16,5 +16,5 @@
         android:maxSdkVersion="32"
         tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <application android:name=".TalkerSdk"/>
+    <application android:name=".TalkerSdkBackgroundService"/>
 </manifest>
