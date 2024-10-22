@@ -13,4 +13,5 @@ internal object ApiRoutes {
     const val  CREATE_CHANNEL = "/chat/channel"
     const val  EDIT_CHANNEL = "chat/channel"
     const val  EXIT_CHANNEL = "exit_room"
+    const val  UPLOAD_MESSAGE = "/chat/upload"
 }

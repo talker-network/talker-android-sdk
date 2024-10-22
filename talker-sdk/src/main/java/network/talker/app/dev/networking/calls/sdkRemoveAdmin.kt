@@ -12,7 +12,7 @@ import network.talker.app.dev.networking.data.AdminRemoveModelRequest
 import network.talker.app.dev.networking.data.ErrorData
 import network.talker.app.dev.utils.AppUtils
 
-internal fun sdkRemoveAdmin(
+internal suspend fun sdkRemoveAdmin(
     context : Context,
     token : String,
     channel_id : String,
@@ -22,7 +22,7 @@ internal fun sdkRemoveAdmin(
     onInternetNotAvailable : () -> Unit = {},
 ){
     if (AppUtils.isNetworkAvailable(context)){
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+        withContext(SupervisorJob() + Dispatchers.IO) {
             try {
                 val response = RetrofitClient.retrofitApiService.SdkRemoveAdmin(
                     token = token,

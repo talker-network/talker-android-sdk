@@ -8,6 +8,7 @@ import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 import network.talker.app.dev.networking.data.Channel
 import network.talker.app.dev.networking.data.GetAllUserModelData
+import network.talker.app.dev.networking.data.MessageObjectForLocalDB
 
 @Dao
 interface Dao {
@@ -41,4 +42,10 @@ interface Dao {
 
     @Query("DELETE FROM user_table")
     suspend fun clearUsers()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE, entity = MessageObjectForLocalDB::class)
+    suspend fun insertMessage(message : MessageObjectForLocalDB)
+
+    @Query("SELECT * FROM message WHERE channel_id = :channelId")
+    fun getChannelMessages(channelId : String) : Flow<List<MessageObjectForLocalDB>>
 }

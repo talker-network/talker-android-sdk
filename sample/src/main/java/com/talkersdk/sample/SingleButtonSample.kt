@@ -2,6 +2,9 @@ package com.talkersdk.sample
 
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -112,7 +115,6 @@ fun SingleButtonSample(fcmToken: String) {
                 }
             }
         }
-
 
     var showCreateChannelDialog by remember {
         mutableStateOf(false)
@@ -295,6 +297,45 @@ fun SingleButtonSample(fcmToken: String) {
                         currentSpeaking = data.SenderName
                     }
 
+                    Talker.eventListener.onNewMessageReceived = {
+                        Toast.makeText(context, it.description, Toast.LENGTH_SHORT).show()
+                    }
+
+                    val imagePicker = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.PickVisualMedia()
+                    ) { uri ->
+                        uri?.let {
+                            Talker.uploadImage(
+                                context,
+                                selectedChannel.channel_id,
+                                "Caption",
+                                uri,
+                                onSuccess = {
+
+                                },
+                                onFailure = {
+                                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+                    }
+
+                    val pdfLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri ->
+                        uri?.let {
+                            Talker.uploadDocument(
+                                context,
+                                selectedChannel.channel_id,
+                                documentUri = it,
+                                onSuccess = {
+
+                                },
+                                onFailure = {
+                                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+                    }
+
                     LaunchedEffect(key1 = interactionSource) {
                         interactionSource.interactions.collect() {
                             when (it) {
@@ -459,6 +500,28 @@ fun SingleButtonSample(fcmToken: String) {
                             )
                         }) {
                             Text(text = "Leave Channel")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Row {
+                        Button(onClick = {
+                            pdfLauncher.launch("application/pdf")
+                        }) {
+                            Text(text = "Upload Pdf")
+                        }
+
+                        Spacer(modifier = Modifier.width(20.dp))
+
+                        Button(onClick = {
+                            imagePicker.launch(
+                                PickVisualMediaRequest(
+                                    ActivityResultContracts.PickVisualMedia.ImageOnly
+                                )
+                            )
+                        }) {
+                            Text(text = "Upload Image")
                         }
                     }
 

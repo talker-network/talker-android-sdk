@@ -22,8 +22,10 @@ import network.talker.app.dev.networking.data.UpdateApnsTokenRequest
 import network.talker.app.dev.networking.data.UpdateApnsTokenResponse
 import network.talker.app.dev.networking.data.UpdateChannelNameModel
 import network.talker.app.dev.networking.data.UpdateChannelNameModelRequest
+import network.talker.app.dev.networking.data.UploadMessageResponse
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
+import org.w3c.dom.Document
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -95,13 +97,11 @@ internal interface RetrofitApiService {
         @Body body : AdminRemoveModelRequest,
     ) : Response<AdminRemoveModel>
 
-
     @PUT(ApiRoutes.EDIT_CHANNEL)
     suspend fun SdkUpdateChannelName(
         @Header("Authorization") token: String,
         @Body body : UpdateChannelNameModelRequest,
     ) : Response<UpdateChannelNameModel>
-
 
 
     @PUT(ApiRoutes.EDIT_CHANNEL)
@@ -121,5 +121,15 @@ internal interface RetrofitApiService {
         @Header("Authorization") token: String,
         @Query("channel_id") channelId : String,
     ) : Response<ExitChannelResponse>
+
+    @Multipart
+    @POST(ApiRoutes.UPLOAD_MESSAGE)
+    suspend fun SdkUploadMessage(
+        @Header("Authorization") token: String,
+        @Part("channel_id") channelId : RequestBody,
+        @Part("description") description : RequestBody,
+        @Part image : MultipartBody.Part?,
+        @Part document : MultipartBody.Part?,
+    ) : Response<UploadMessageResponse>
 
 }

@@ -29,9 +29,11 @@ import com.amazonaws.mobile.client.results.SignInResult
 import com.amazonaws.services.kinesisvideo.model.ChannelRole
 import com.amazonaws.services.kinesisvideo.model.ResourceEndpointListItem
 import com.amazonaws.services.kinesisvideosignaling.model.IceServer
-import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.launch
 import network.talker.app.dev.model.AudioData
 import network.talker.app.dev.model.Event
@@ -46,6 +48,7 @@ import network.talker.app.dev.networking.calls.sdkGetAllChannels
 import network.talker.app.dev.networking.calls.sdkGetAllUsersApi
 import network.talker.app.dev.networking.calls.sdkRemoveAdmin
 import network.talker.app.dev.networking.calls.sdkRemoveParticipant
+import network.talker.app.dev.networking.calls.sdkSendMsg
 import network.talker.app.dev.networking.calls.sdkSetUser
 import network.talker.app.dev.networking.calls.sdkUpdateChannelName
 import network.talker.app.dev.networking.data.AddNewAdminModelData
@@ -54,6 +57,8 @@ import network.talker.app.dev.networking.data.AdminRemoveModelData
 import network.talker.app.dev.networking.data.Channel
 import network.talker.app.dev.networking.data.CreateChannelModel
 import network.talker.app.dev.networking.data.GetAllUserModelData
+import network.talker.app.dev.networking.data.MessageObject
+import network.talker.app.dev.networking.data.MessageObjectForLocalDB
 import network.talker.app.dev.networking.data.RemoveParticipantModelData
 import network.talker.app.dev.networking.data.UpdateChannelNameModelData
 import network.talker.app.dev.okhttp.SignalingListener
@@ -62,6 +67,7 @@ import network.talker.app.dev.sharedPreference.SharedPreference
 import network.talker.app.dev.socket.SocketHandler
 import network.talker.app.dev.utils.Constants
 import network.talker.app.dev.utils.getSignedUri
+import network.talker.app.dev.utils.isFileSizeSmaller
 import network.talker.app.dev.webrtc.AudioStatus
 import network.talker.app.dev.webrtc.CreateLocalPeerConnection
 import network.talker.app.dev.webrtc.Kinesis
@@ -72,7 +78,6 @@ import network.talker.app.dev.webrtc.checkAndAddIceCandidate
 import network.talker.app.dev.webrtc.createSdpAnswer
 import network.talker.app.dev.webrtc.createSdpOffer
 import network.talker.app.dev.webrtc.handlePendingIceCandidates
-import org.json.JSONObject
 import org.webrtc.AudioTrack
 import org.webrtc.DataChannel
 import org.webrtc.IceCandidate
@@ -151,6 +156,7 @@ object Talker {
         var onNewSdkUser: ((data: GetAllUserModelData) -> Unit)? = null
         var onAdminAdded: ((data: AddNewAdminModelData) -> Unit)? = null
         var onAdminRemoved: ((data: AdminRemoveModelData) -> Unit)? = null
+        var onNewMessageReceived : ((data: MessageObject) -> Unit)? = null
         var currentPttAudio : ((data: AudioData) -> Unit)? = null
     }
 
@@ -417,6 +423,9 @@ object Talker {
             SharedPreference(TalkerSdkBackgroundService.talkerApplicationContext).getUserData().user_id
         )
 
+    /**
+     * @return Returns the user_id of the current logged in user.
+     */
     fun getCurrentUserId(context: Context): String {
         val sharedPreference = SharedPreference(context)
         return sharedPreference.getUserData().user_id
@@ -432,6 +441,30 @@ object Talker {
         return Pair(sharedPreference.getUserData().user_id, sharedPreference.getUserData().name)
     }
 
+
+    /**
+     * Get the current logged in user's data
+     *
+     * @return Returns a Pair<String, String> where first parameter gives the userId and second gives the name.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun getChannelMessages(channelId : String) : Flow<List<MessageObject>> {
+        return TalkerSdkBackgroundService.database.roomDao().getChannelMessages(
+            channelId
+        ).mapLatest { list ->
+            list.map { item ->
+                MessageObject(
+                    attachments = item.attachments,
+                    channel_id = item.channel_id,
+                    channel_name = item.channel_name,
+                    description = item.text,
+                    id = item.id,
+                    sent_at = item.sent_at,
+                    sender_id = item.sender_id
+                )
+            }
+        }
+    }
 
 
     // call this function to edit the channel's name
@@ -690,7 +723,6 @@ object Talker {
                 onFailure("Cannot remove admin from direct channel")
                 return@launch
             }
-
             sdkRemoveAdmin(
                 context,
                 SharedPreference(context).getUserData().user_auth_token,
@@ -702,6 +734,151 @@ object Talker {
                     } else {
                         onFailure("Failed")
                     }
+                },
+                onError = {
+                    onFailure(it.message)
+                },
+                onInternetNotAvailable = {
+                    onFailure("Failure due to no internet connectivity")
+                }
+            )
+        }
+    }
+
+
+    fun sendTextMsg(
+        context: Context,
+        channelId : String,
+        text : String,
+        onSuccess : (String) -> Unit,
+        onFailure : (String) -> Unit
+    ) {
+        validateSDKKey()
+        if (channelId.isBlank()) {
+            onFailure("Invalid channelId")
+            return
+        }
+        if (text.isBlank()) {
+            onFailure("Invalid text")
+            return
+        }
+        CoroutineScope(Dispatchers.Main).launch {
+            sdkSendMsg(
+                context,
+                SharedPreference(context).getUserData().user_auth_token,
+                channelId,
+               text = text,
+                onSuccess = {
+//                    if (it.success) {
+                        onSuccess("Admin removed")
+//                    } else {
+//                        onFailure("Failed")
+//                    }
+                },
+                onError = {
+                    onFailure(it.message)
+                },
+                onInternetNotAvailable = {
+                    onFailure("Failure due to no internet connectivity")
+                }
+            )
+        }
+    }
+
+    fun uploadImage(
+        context: Context,
+        channelId : String,
+        caption : String,
+        imageUri : Uri,
+        onSuccess : (String) -> Unit,
+        onFailure : (String) -> Unit
+    ) {
+        validateSDKKey()
+        if (channelId.isBlank()) {
+            onFailure("Invalid channelId")
+            return
+        }
+        if (imageUri == Uri.EMPTY) {
+            onFailure("Invalid imageUri")
+            return
+        }
+        if (context.contentResolver.getType(imageUri)?.startsWith("image/") != true) {
+            onFailure("Invalid imageUri")
+            return
+        }
+        if (!isFileSizeSmaller(
+            uri = imageUri,
+            context,
+            5
+        )) {
+            onFailure("File size greater than 5MB")
+            return
+        }
+        CoroutineScope(Dispatchers.Main).launch {
+            sdkSendMsg(
+                context,
+                SharedPreference(context).getUserData().user_auth_token,
+                channelId,
+               text = caption,
+                imageUri = imageUri,
+                onSuccess = {
+//                    if (it.success) {
+                        onSuccess("Image sent")
+//                    } else {
+//                        onFailure("Failed")
+//                    }
+                },
+                onError = {
+                    onFailure(it.message)
+                },
+                onInternetNotAvailable = {
+                    onFailure("Failure due to no internet connectivity")
+                }
+            )
+        }
+    }
+
+    fun uploadDocument(
+        context: Context,
+        channelId : String,
+        documentUri : Uri,
+        onSuccess : (String) -> Unit,
+        onFailure : (String) -> Unit
+    ) {
+        validateSDKKey()
+        if (channelId.isBlank()) {
+            onFailure("Invalid channelId")
+            return
+        }
+        if (documentUri == Uri.EMPTY) {
+            onFailure("Invalid documentUri")
+            return
+        }
+        if (context.contentResolver.getType(documentUri)?.startsWith("application/pdf") != true) {
+            onFailure("Invalid documentUri")
+            return
+        }
+        if (!isFileSizeSmaller(
+                uri = documentUri,
+                context,
+                5
+            )) {
+            onFailure("File size greater than 5MB")
+            return
+        }
+        CoroutineScope(Dispatchers.Main).launch {
+            sdkSendMsg(
+                context,
+                SharedPreference(context).getUserData().user_auth_token,
+                channelId,
+               text = "",
+                documentUri = documentUri,
+                onSuccess = {
+//                    if (it.success) {
+                        onSuccess("Document sent")
+//                    } else {
+//                        onFailure("Failed")
+//                    }
                 },
                 onError = {
                     onFailure(it.message)
@@ -1602,6 +1779,77 @@ object Talker {
                                             eventListener.onAdminRemoved?.invoke(
                                                 removedAdmin
                                             )
+                                        }
+                                    }
+                                }
+                            }
+
+                            "MESSAGE" -> {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    intent.getSerializableExtra(
+                                        "channel_obj", MessageObject::class.java
+                                    )?.let { message ->
+                                        CoroutineScope(Dispatchers.Main).launch {
+                                            val userId = context?.let {
+                                                SharedPreference(it).getUserData().user_id
+                                            } ?: ""
+                                            Log.d(
+                                                "@@@@",
+                                                "From message : $message"
+                                            )
+                                            if (message.sender_id != userId) {
+                                                val senderName = TalkerSdkBackgroundService.database.roomDao()
+                                                    .getUserById(message.sender_id)
+                                                val channelName2 = TalkerSdkBackgroundService.database.roomDao()
+                                                    .getChannelById(message.channel_id)
+                                                val messageObject = MessageObjectForLocalDB(
+                                                    attachments = message.attachments,
+                                                    channel_id = message.channel_id,
+                                                    channel_name = channelName2?.group_name ?: "Channel Name",
+                                                    text = message.description,
+                                                    id = message.id,
+                                                    sent_at = message.sent_at,
+                                                    sender_id = message.sender_id,
+                                                    sender_name = senderName?.name ?: "User"
+                                                )
+                                                TalkerSdkBackgroundService.database.roomDao()
+                                                    .insertMessage(messageObject)
+                                                eventListener.onNewMessageReceived?.invoke(message)
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    val channelObj = intent.getSerializableExtra(
+                                        "channel_obj"
+                                    ) as MessageObject
+                                    channelObj.let { message ->
+                                        CoroutineScope(Dispatchers.Main).launch {
+                                            val userId = context?.let {
+                                                SharedPreference(it).getUserData().user_id
+                                            } ?: ""
+                                            Log.d(
+                                                "@@@@",
+                                                "From message : $message"
+                                            )
+                                            if (message.sender_id != userId){
+                                                val senderName = TalkerSdkBackgroundService.database.roomDao()
+                                                    .getUserById(message.sender_id)
+                                                val channelName2 = TalkerSdkBackgroundService.database.roomDao()
+                                                    .getChannelById(message.channel_id)
+                                                val messageObject = MessageObjectForLocalDB(
+                                                    attachments = message.attachments,
+                                                    channel_id = message.channel_id,
+                                                    channel_name = channelName2?.group_name ?: "Channel Name",
+                                                    text = message.description,
+                                                    id = message.id,
+                                                    sent_at = message.sent_at,
+                                                    sender_id = message.sender_id,
+                                                    sender_name = senderName?.name ?: "User"
+                                                )
+                                                TalkerSdkBackgroundService.database.roomDao()
+                                                    .insertMessage(messageObject)
+                                                eventListener.onNewMessageReceived?.invoke(message)
+                                            }
                                         }
                                     }
                                 }

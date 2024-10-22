@@ -22,6 +22,7 @@ import network.talker.app.dev.networking.data.AddNewParticipantModelData
 import network.talker.app.dev.networking.data.AdminRemoveModelData
 import network.talker.app.dev.networking.data.Channel
 import network.talker.app.dev.networking.data.GetAllUserModelData
+import network.talker.app.dev.networking.data.MessageObject
 import network.talker.app.dev.networking.data.RemoveParticipantModelData
 import network.talker.app.dev.networking.data.UpdateChannelNameModelData
 import network.talker.app.dev.sharedPreference.SharedPreference
@@ -451,6 +452,45 @@ internal object SocketHandler {
                             Log.d(
                                 LOG_TAG,
                                 "Socket room_admin_removed error : ${e.message}"
+                            )
+                        }
+                    }
+                } else {
+                    acknowledgeAck(arg)
+                }
+            }
+        }
+        socket?.on(
+            "message"
+        ) { args ->
+            args.forEach { arg ->
+                if (arg is String) {
+                    runOnUiThread {
+                        try {
+                            Log.d(
+                                LOG_TAG,
+                                "Socket message object : ${JsonParser.parseString(arg).asJsonObject}"
+                            )
+                            context.sendBroadcast(
+                                Intent()
+                                    .setPackage(context.packageName)
+                                    .setAction("com.talker.sdk")
+                                    .apply {
+                                        putExtra("action", "MESSAGE")
+                                        putExtra("message", "New message received")
+                                        putExtra(
+                                            "channel_obj", Gson().fromJson(
+                                                arg,
+                                                MessageObject::class.java
+                                            )
+                                        )
+                                    }
+                            )
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            Log.d(
+                                LOG_TAG,
+                                "Socket message error : ${e.message}"
                             )
                         }
                     }
