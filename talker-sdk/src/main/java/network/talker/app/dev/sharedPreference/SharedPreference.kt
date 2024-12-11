@@ -30,6 +30,16 @@ internal class SharedPreference(private val context : Context) {
         )
     }
 
+    fun setPrevUserId(prevUserId : String) {
+        sharedPreference.edit {
+            putString("prev_user_id", prevUserId)
+        }
+    }
+
+    fun getPrevUserId() : String {
+        return sharedPreference.getString("prev_user_id", "") ?: ""
+    }
+
     fun clearPreference(){
         sharedPreference.edit().apply {
             clear()

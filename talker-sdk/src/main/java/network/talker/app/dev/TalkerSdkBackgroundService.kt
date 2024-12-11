@@ -10,6 +10,7 @@ import com.amazonaws.mobile.client.AWSMobileClient
 import network.talker.app.dev.localDatabase.Database
 import network.talker.app.dev.networking.data.Cognito
 import network.talker.app.dev.player.AudioPlayerService
+import network.talker.app.dev.sharedPreference.SharedPreference
 import network.talker.app.dev.webrtc.initializeMobileClient
 
 internal class TalkerSdkBackgroundService : Application() {
@@ -35,5 +36,7 @@ internal class TalkerSdkBackgroundService : Application() {
         ).allowMainThreadQueries().build()
         val serviceIntent = Intent(this, AudioPlayerService::class.java)
         startForegroundService(serviceIntent)
+        val sharedPreference = SharedPreference(this)
+        println("Prev User Id : ${sharedPreference.getPrevUserId()}")
     }
 }

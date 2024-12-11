@@ -21,6 +21,7 @@ class TalkerFirebaseMessagingService : FirebaseMessagingService() {
         // pass the intent and talker sdk will handle playing and showing the notification audio message
         // just handle post notification permission and services permission and sdk will do the rest.
 //        processTalkerFcm(intent, this)
+        println("Ok Printed")
         Talker.processTalkerFcm(intent, this)
     }
 

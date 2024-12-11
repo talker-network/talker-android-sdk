@@ -47,10 +47,10 @@ class AudioPlayerService : Service() {
     private val liveMsgPrty : MutableList<String> = mutableListOf()
     // this will store the current playing media link
     private var currentLiveMessage : AudioModel? = null
+    private var fcmList = mutableSetOf<String>()
     override fun onBind(intent: Intent?): IBinder? {
         return null
     }
-
     override fun onCreate() {
         val broadCastReceiver = object : BroadcastReceiver() {
             @OptIn(UnstableApi::class)
@@ -77,11 +77,25 @@ class AudioPlayerService : Service() {
                     "channel_id",
                     "channel_id : $channelId"
                 )
-//                Log.d(
-//                    "audioModel",
-//                    "audioModel : $audioModel"
-//                )
                 if (audioModel != null) {
+                    // if it is coming from fcm then true else false
+                    val fromNotification = intent?.extras?.getBoolean("from_notification") ?: false
+                    if (fromNotification) {
+                        // if it is coming from fcm
+                        // then add the id to fcmList of ids
+                        audioModel.id?.let {
+                            fcmList.add(it)
+                        }
+                    }else{
+                        // if not coming from fcm and the id of the audio
+                        // already exists in fcm list and then it means
+                        // it was already played or it has already been added in the queue
+                        // so simply return
+                        if (fcmList.contains(audioModel.id)) {
+                            fcmList.remove(audioModel.id)
+                            return
+                        }
+                    }
                     liveMsgQue[channelId] = liveMsgQue.getOrDefault(channelId, arrayOf()) + audioModel
                     liveMsgPrty.add(channelId)
                     nextLiveMsg()

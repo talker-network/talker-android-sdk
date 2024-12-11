@@ -770,7 +770,7 @@ object Talker {
                text = text,
                 onSuccess = {
 //                    if (it.success) {
-                        onSuccess("Admin removed")
+                        onSuccess("Message Sent")
 //                    } else {
 //                        onFailure("Failed")
 //                    }
@@ -1022,6 +1022,11 @@ object Talker {
                             object : Callback<Void> {
                                 override fun onResult(result: Void?) {
                                     CoroutineScope(Dispatchers.Main).launch {
+
+                                        val preference = SharedPreference(applicationContext)
+                                        val prevUserId = preference.getUserData().user_id
+                                        preference.clearPreference()
+                                        preference.setPrevUserId(prevUserId)
                                         sendBroadCast(
                                             "CONNECTION_CLOSED",
                                             "Connection closed"
@@ -1030,6 +1035,8 @@ object Talker {
                                 }
 
                                 override fun onError(e: java.lang.Exception?) {
+                                    var preference = SharedPreference(applicationContext)
+                                    preference.setPrevUserId(preference.getUserData().user_id)
                                     CoroutineScope(Dispatchers.Main).launch {
                                         sendBroadCast(
                                             "CONNECTION_CLOSED",

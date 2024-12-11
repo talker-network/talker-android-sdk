@@ -3,7 +3,6 @@ package network.talker.app.dev.socket
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import com.amazonaws.mobile.auth.core.internal.util.ThreadUtils.runOnUiThread
 import com.google.gson.Gson

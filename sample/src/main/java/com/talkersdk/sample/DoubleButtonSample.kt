@@ -2,6 +2,9 @@ package com.talkersdk.sample
 
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -12,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -186,7 +190,7 @@ fun DoubleButtonSample(fcmToken: String) {
                         }) {
                             Text(text = "Re-Login")
                         }
-                        Spacer(modifier = Modifier.height(50.dp))
+                        Spacer(modifier = Modifier.height(25.dp))
                     }
                     var name by remember {
                         mutableStateOf("")
@@ -264,6 +268,49 @@ fun DoubleButtonSample(fcmToken: String) {
                         currentSpeaking = data.SenderName
                     }
 
+
+                    Talker.eventListener.onNewMessageReceived = {
+                        Toast.makeText(context, it.description, Toast.LENGTH_SHORT).show()
+                    }
+
+
+
+                    val imagePicker = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.PickVisualMedia()
+                    ) { uri ->
+                        uri?.let {
+                            Talker.uploadImage(
+                                context,
+                                selectedChannel.channel_id,
+                                "Caption",
+                                uri,
+                                onSuccess = {
+
+                                },
+                                onFailure = {
+                                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+                    }
+
+
+                    val pdfLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri ->
+                        uri?.let {
+                            Talker.uploadDocument(
+                                context,
+                                selectedChannel.channel_id,
+                                documentUri = it,
+                                onSuccess = {
+
+                                },
+                                onFailure = {
+                                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+                    }
+
                     Text(text = "Audio Status : $status")
                     Spacer(modifier = Modifier.height(20.dp))
                     Text(text = "Current Speaking : $currentSpeaking")
@@ -307,7 +354,7 @@ fun DoubleButtonSample(fcmToken: String) {
                             Text(text = "Stop")
                         }
                     }
-                    Spacer(modifier = Modifier.height(50.dp))
+                    Spacer(modifier = Modifier.height(25.dp))
 
                     Row {
                         Button(
@@ -338,7 +385,7 @@ fun DoubleButtonSample(fcmToken: String) {
                             Text(text = "Logout")
                         }
                     }
-                    Spacer(modifier = Modifier.height(50.dp))
+                    Spacer(modifier = Modifier.height(25.dp))
                     Box(
                         modifier = Modifier.wrapContentSize(),
                         contentAlignment = Alignment.Center
@@ -367,7 +414,7 @@ fun DoubleButtonSample(fcmToken: String) {
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(50.dp))
+                    Spacer(modifier = Modifier.height(25.dp))
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(15.dp)
                     ) {
@@ -426,6 +473,67 @@ fun DoubleButtonSample(fcmToken: String) {
                             )
                         }) {
                             Text(text = "Leave Channel")
+                        }
+                    }
+
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Row(
+                        Modifier
+                            .padding(horizontal = 25.dp)
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        var myMessage by rememberSaveable {
+                            mutableStateOf("")
+                        }
+                        TextField(value = myMessage, onValueChange = { myMessage = it }, placeholder = {
+                            Text(text = "Enter message...")
+                        }, singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Spacer(modifier = Modifier.width(15.dp))
+
+                        Button(onClick = {
+                            Talker.sendTextMsg(
+                                context,
+                                selectedChannel.channel_id,
+                                text = myMessage,
+                                onSuccess = {
+                                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                                },
+                                onFailure = {
+                                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                            myMessage = ""
+                        }) {
+                            Text(text = "Send Msg")
+                        }
+
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Row {
+                        Button(onClick = {
+                            pdfLauncher.launch("application/pdf")
+                        }) {
+                            Text(text = "Upload Pdf")
+                        }
+
+                        Spacer(modifier = Modifier.width(20.dp))
+
+                        Button(onClick = {
+                            imagePicker.launch(
+                                PickVisualMediaRequest(
+                                    ActivityResultContracts.PickVisualMedia.ImageOnly
+                                )
+                            )
+                        }) {
+                            Text(text = "Upload Image")
                         }
                     }
 

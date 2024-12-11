@@ -26,10 +26,12 @@ import network.talker.app.dev.player.AudioPlayerService
 import kotlin.random.Random
 
 fun Talker.processTalkerFcm(intent: Intent?, context: Context) {
-    Log.d(
-        "onMessageReceived : ",
-        JsonParser.parseString(intent?.extras?.getString("data") ?: "").asJsonObject.toString()
-    )
+    intent?.extras?.getString("data")?.let {
+        Log.d(
+            "onMessageReceived : ",
+            JsonParser.parseString(it).asJsonObject.toString()
+        )
+    }
     if (intent?.extras?.getString("type") == "message") {
         Handler(Looper.getMainLooper()).post {
             val channelId = "messages"
@@ -48,8 +50,17 @@ fun Talker.processTalkerFcm(intent: Intent?, context: Context) {
 
             val notification = NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(R.drawable.ic_launcher_foreground) // Your notification icon
-                .setContentTitle(messageObjLocalDB.sender_name)
-                .setContentText(messageObj.description + " " + messageObj.sender_id)
+                .setContentTitle(
+                    JsonParser.parseString(intent.extras?.getString("data")).asJsonObject.get("group_name").asString.ifEmpty {
+                        messageObjLocalDB.channel_name
+                    }
+                )
+                .setContentText(
+                    messageObjLocalDB.sender_name + " : " +
+                        if (messageObj.attachments.document?.isNotEmpty() == true) "Document"
+                    else if (messageObj.attachments.images?.isNotEmpty() == true) "Image"
+                    else messageObj.description
+                )
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setAutoCancel(true)
                 .setGroup(messageObj.sender_id) // Group key
@@ -97,13 +108,15 @@ fun Talker.processTalkerFcm(intent: Intent?, context: Context) {
                             .setPackage(context.packageName)
                             .setAction("audio_player.sdk")
                             .apply {
+                                putExtra("from_notification", true)
                                 putExtra("media_link", url)
                                 putExtra("channel_id", channelId)
                                 putExtra("channel_obj",
                                     Gson().fromJson(
                                         intent.extras?.getString("data") ?: "",
                                         AudioModel::class.java
-                                    ))
+                                    )
+                                )
                             }
                     )
                 } catch (e : Exception){
@@ -112,5 +125,4 @@ fun Talker.processTalkerFcm(intent: Intent?, context: Context) {
             }
         }
     }
-
 }

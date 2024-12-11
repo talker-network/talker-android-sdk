@@ -10,6 +10,7 @@ import network.talker.app.dev.networking.data.AdminRemoveModelRequest
 import network.talker.app.dev.networking.data.CreateChannelModel
 import network.talker.app.dev.networking.data.CreateUserModel
 import network.talker.app.dev.networking.data.CreateUserModelRequest
+import network.talker.app.dev.networking.data.CreateUserModelRequestWithPrevId
 import network.talker.app.dev.networking.data.CredModel
 import network.talker.app.dev.networking.data.ExitChannelResponse
 import network.talker.app.dev.networking.data.ExitChannelRequest
@@ -18,6 +19,7 @@ import network.talker.app.dev.networking.data.GetChannelListModel
 import network.talker.app.dev.networking.data.RemoveParticipantModel
 import network.talker.app.dev.networking.data.RemoveParticipantModelRequest
 import network.talker.app.dev.networking.data.SetUserModelRequest
+import network.talker.app.dev.networking.data.SetUserModelRequestWithPrevId
 import network.talker.app.dev.networking.data.UpdateApnsTokenRequest
 import network.talker.app.dev.networking.data.UpdateApnsTokenResponse
 import network.talker.app.dev.networking.data.UpdateChannelNameModel
@@ -45,10 +47,22 @@ internal interface RetrofitApiService {
         @Body body: CreateUserModelRequest
     ) : Response<CreateUserModel>
 
+    @POST(ApiRoutes.CREATE_USER)
+    suspend fun SdkCreateUserAPIWithPrevID(
+        @Header("Authorization") token: String,
+        @Body body: CreateUserModelRequestWithPrevId
+    ) : Response<CreateUserModel>
+
     @PUT(ApiRoutes.SET_USER)
     suspend fun SdkSetUserAPI(
         @Header("Authorization") token: String,
         @Body body: SetUserModelRequest
+    ) : Response<CreateUserModel>
+
+    @PUT(ApiRoutes.SET_USER)
+    suspend fun SdkSetUserAPIWithPrevId(
+        @Header("Authorization") token: String,
+        @Body body: SetUserModelRequestWithPrevId
     ) : Response<CreateUserModel>
 
     @PUT(ApiRoutes.UPDATE_APNS_PTT)

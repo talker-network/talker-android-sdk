@@ -11,6 +11,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import network.talker.app.dev.networking.data.CreateUserModelRequestWithPrevId
+import network.talker.app.dev.sharedPreference.SharedPreference
 
 internal fun sdkCreateUser(
     context : Context,
@@ -21,14 +23,22 @@ internal fun sdkCreateUser(
     onError : (ErrorData) -> Unit = {},
     onInternetNotAvailable : () -> Unit = {},
 ){
+    val sharedPreference = SharedPreference(context)
     if (AppUtils.isNetworkAvailable(context)){
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
-                val response = RetrofitClient.retrofitApiService.SdkCreateUserAPI(
+                val response = if (sharedPreference.getPrevUserId().isBlank()) RetrofitClient.retrofitApiService.SdkCreateUserAPI(
                     token = sdkKey,
                     body = CreateUserModelRequest(
                         name = name,
                         fcm_token = fcmToken
+                    )
+                ) else RetrofitClient.retrofitApiService.SdkCreateUserAPIWithPrevID(
+                    token = sdkKey,
+                    body = CreateUserModelRequestWithPrevId(
+                        name = name,
+                        fcm_token = fcmToken,
+                        prev_user_id = sharedPreference.getPrevUserId()
                     )
                 )
                 if (response.isSuccessful && response.body() != null && response.code() == 200){

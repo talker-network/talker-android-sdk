@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -128,6 +129,8 @@ fun SingleButtonSample(fcmToken: String) {
     val channels by Talker.getChannelList().collectAsState(initial = emptyList())
     // list of all users available in the sdk
     val users by Talker.getAllUsers().collectAsState(initial = emptyList())
+
+
 
 
     // show loader if some process is executing..
@@ -383,7 +386,7 @@ fun SingleButtonSample(fcmToken: String) {
                     ) {
                         Text(text = "Push to talk")
                     }
-                    Spacer(modifier = Modifier.height(50.dp))
+                    Spacer(modifier = Modifier.height(25.dp))
                     Row {
                         Button(
                             onClick = {
@@ -413,7 +416,7 @@ fun SingleButtonSample(fcmToken: String) {
                             Text(text = "Logout")
                         }
                     }
-                    Spacer(modifier = Modifier.height(50.dp))
+                    Spacer(modifier = Modifier.height(25.dp))
                     Box(
                         modifier = Modifier.wrapContentSize(),
                         contentAlignment = Alignment.Center
@@ -442,7 +445,7 @@ fun SingleButtonSample(fcmToken: String) {
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(50.dp))
+                    Spacer(modifier = Modifier.height(25.dp))
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(15.dp)
                     ) {
@@ -501,6 +504,45 @@ fun SingleButtonSample(fcmToken: String) {
                         }) {
                             Text(text = "Leave Channel")
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Row(
+                        Modifier
+                            .padding(horizontal = 25.dp)
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        var myMessage by rememberSaveable {
+                            mutableStateOf("")
+                        }
+                        TextField(value = myMessage, onValueChange = { myMessage = it }, placeholder = {
+                            Text(text = "Enter message...")
+                        }, singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Spacer(modifier = Modifier.width(15.dp))
+
+                        Button(onClick = {
+
+                            Talker.sendTextMsg(
+                                context,
+                                selectedChannel.channel_id,
+                                text = myMessage,
+                                onSuccess = {
+                                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                                },
+                                onFailure = {
+                                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                            myMessage = ""
+                        }) {
+                            Text(text = "Send Msg")
+                        }
+
                     }
 
                     Spacer(modifier = Modifier.height(20.dp))

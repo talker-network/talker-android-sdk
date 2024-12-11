@@ -6,6 +6,13 @@ internal data class CreateUserModelRequest(
     val platform : String = "ANDROID"
 )
 
+internal data class CreateUserModelRequestWithPrevId(
+    val name : String = "",
+    val fcm_token : String = "",
+    val platform : String = "ANDROID",
+    val prev_user_id : String = ""
+)
+
 internal data class CreateUserModel(
     val data: CreateUserModelData = CreateUserModelData(),
     val success: Boolean = false
