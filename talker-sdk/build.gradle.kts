@@ -46,8 +46,9 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1")
 
     implementation("org.webrtc:google-webrtc:1.0.+")
-    implementation("org.awaitility:awaitility:4.2.2")
-
+    implementation("org.awaitility:awaitility:4.2.2") {
+        isTransitive = false
+    }
     val aws_version = "2.75.0"
     implementation("com.amazonaws:aws-android-sdk-kinesisvideo:$aws_version")
     implementation("com.amazonaws:aws-android-sdk-kinesisvideo-signaling:$aws_version")
