@@ -2,7 +2,7 @@ package network.talker.app.dev.networking.calls
 
 import android.content.Context
 import android.net.Uri
-import com.crm.buildyaar.builder.utils.createImgBodyPart
+import network.talker.app.dev.utils.createImgBodyPart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

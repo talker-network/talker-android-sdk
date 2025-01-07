@@ -32,6 +32,31 @@ android {
     }
 }
 
+// Create a resolvable configuration that extends runtimeOnly
+configurations.create("resolvedRuntimeOnly") {
+    extendsFrom(configurations.runtimeOnly.get())
+    isCanBeResolved = true
+    isCanBeConsumed = false
+}
+
+tasks.register<Copy>("copyDependencies") {
+    from(configurations.getByName("resolvedRuntimeOnly"))
+    into(layout.buildDirectory.dir("libs"))
+}
+
+tasks.register<Zip>("fatAar") {
+    doNotTrackState("The task is not compatible with incremental build")
+    archiveBaseName.set("talker-sdk-fat")
+    archiveVersion.set("1.0.0")
+    archiveExtension.set("aar")
+
+    from(layout.buildDirectory.dir("intermediates/aar_main_jar/release"))
+
+    dependsOn("assembleRelease", "copyDependencies")
+
+    from(layout.buildDirectory.dir("libs"))
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
@@ -74,9 +99,45 @@ dependencies {
 
     val room_version = "2.6.1"
     implementation("androidx.room:room-runtime:$room_version")
-    annotationProcessor("androidx.room:room-compiler:$room_version")
     // To use Kotlin Symbol Processing (KSP)
     ksp("androidx.room:room-compiler:$room_version")
     // optional - Kotlin Extensions and Coroutines support for Room
     implementation("androidx.room:room-ktx:$room_version")
+
+
+
+
+    runtimeOnly("androidx.media3:media3-exoplayer-hls:1.4.1")
+    runtimeOnly("androidx.media3:media3-exoplayer:1.4.1")
+    runtimeOnly("com.google.code.gson:gson:2.10.1")
+    runtimeOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1")
+
+    runtimeOnly("org.webrtc:google-webrtc:1.0.+")
+    runtimeOnly("org.awaitility:awaitility:4.2.2") {
+        isTransitive = false
+    }
+    runtimeOnly("com.amazonaws:aws-android-sdk-kinesisvideo:$aws_version")
+    runtimeOnly("com.amazonaws:aws-android-sdk-kinesisvideo-signaling:$aws_version")
+    runtimeOnly("com.amazonaws:aws-android-sdk-kinesisvideo-webrtcstorage:$aws_version")
+    runtimeOnly("com.amazonaws:aws-android-sdk-mobile-client:$aws_version")
+    runtimeOnly("com.amazonaws:aws-android-sdk-auth-userpools:$aws_version")
+    runtimeOnly("com.amazonaws:aws-android-sdk-auth-ui:$aws_version")
+
+    runtimeOnly("com.squareup.retrofit2:retrofit:2.11.0")
+    runtimeOnly("com.squareup.retrofit2:converter-gson:2.11.0")
+    runtimeOnly(platform("com.squareup.okhttp3:okhttp-bom:4.12.0"))
+    runtimeOnly("com.squareup.okhttp3:okhttp")
+    runtimeOnly("com.squareup.okhttp3:logging-interceptor")
+
+    runtimeOnly("io.socket:socket.io-client:2.0.0") {
+        exclude(group = "org.json", module = "json")
+    }
+    runtimeOnly("io.socket:engine.io-client:2.1.0")
+
+    runtimeOnly("org.apache.commons:commons-lang3:3.9")
+
+    runtimeOnly("androidx.work:work-runtime-ktx:2.9.1")
+    runtimeOnly("androidx.room:room-runtime:$room_version")
+    // optional - Kotlin Extensions and Coroutines support for Room
+    runtimeOnly("androidx.room:room-ktx:$room_version")
 }
