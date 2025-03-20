@@ -3,10 +3,12 @@ plugins {
     alias(libs.plugins.jetbrains.kotlin.android)
     kotlin("plugin.serialization")
     id("com.google.devtools.ksp")
+    id("maven-publish")
+    id("signing")
 }
 
 android {
-    namespace = "network.talker.app.dev"
+    namespace = "network.talker.sdk"
     compileSdk = 34
 
     defaultConfig {
@@ -31,7 +33,67 @@ android {
         jvmTarget = "1.8"
     }
 }
+publishing {
 
+    publications {
+        register<MavenPublication>("release") {
+            groupId = "network.talker.sdk"  // Change this
+            artifactId = "talker-sdk"
+            version = "1.0.1"
+            afterEvaluate {
+                from(components["release"])
+            }
+            pom {
+                name.set("Talker sdk")
+                description.set("Push to talk sdk")
+                url.set("https://github.com/your-repo")
+                licenses {
+                    license {
+                        name.set("Apache-2.0")
+                        url.set("https://www.apache.org/licenses/LICENSE-2.0.html")
+                    }
+                }
+                developers {
+                    developer {
+                        id.set("yourid")
+                        name.set("Your Name")
+                        email.set("your.email@example.com")
+                    }
+                }
+                scm {
+                    connection.set("scm:git:git://github.com/your-repo.git")
+                    developerConnection.set("scm:git:ssh://github.com:your-repo.git")
+                    url.set("https://github.com/your-repo")
+                }
+            }
+
+
+
+
+
+        }
+    }
+//    repositories {
+//        maven {
+//            url = uri("${rootProject.buildDir}/maven-repo") // Local repository
+//        }
+//    }
+    repositories {
+        maven {
+            name = "sonatype"
+            url = uri("https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/")
+            credentials {
+                username = "2UB4xnX3"
+                password = "Ygp/hTEkRdJeW3jle/Iwe6gDowuHZjYgJW5sHQ98tK"
+            }
+        }
+    }
+
+
+}
+signing {
+    sign(publishing.publications["release"])
+}
 // Create a resolvable configuration that extends runtimeOnly
 configurations.create("resolvedRuntimeOnly") {
     extendsFrom(configurations.runtimeOnly.get())
@@ -70,7 +132,7 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1")
 
-    implementation("org.webrtc:google-webrtc:1.0.+")
+    implementation("org.webrtc:google-webrtc:1.0.30039")
     implementation("org.awaitility:awaitility:4.2.2") {
         isTransitive = false
     }
@@ -104,15 +166,12 @@ dependencies {
     // optional - Kotlin Extensions and Coroutines support for Room
     implementation("androidx.room:room-ktx:$room_version")
 
-
-
-
     runtimeOnly("androidx.media3:media3-exoplayer-hls:1.4.1")
     runtimeOnly("androidx.media3:media3-exoplayer:1.4.1")
     runtimeOnly("com.google.code.gson:gson:2.10.1")
     runtimeOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1")
 
-    runtimeOnly("org.webrtc:google-webrtc:1.0.+")
+    runtimeOnly("org.webrtc:google-webrtc:1.0.30039")
     runtimeOnly("org.awaitility:awaitility:4.2.2") {
         isTransitive = false
     }
