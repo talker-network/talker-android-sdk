@@ -46,7 +46,7 @@ publishing {
             pom {
                 name.set("Talker sdk")
                 description.set("Push to talk sdk")
-                url.set("https://github.com/your-repo")
+                url.set("https://github.com/talker-network/talker-android-sdk")
                 licenses {
                     license {
                         name.set("Apache-2.0")
@@ -55,41 +55,29 @@ publishing {
                 }
                 developers {
                     developer {
-                        id.set("yourid")
-                        name.set("Your Name")
-                        email.set("your.email@example.com")
+                        id.set("talker")
+                        name.set("Talker SDK Team")
+                        email.set("sanil@talker.network")
                     }
                 }
                 scm {
-                    connection.set("scm:git:git://github.com/your-repo.git")
-                    developerConnection.set("scm:git:ssh://github.com:your-repo.git")
-                    url.set("https://github.com/your-repo")
+                    connection.set("scm:git:git://github.com/talker-network/talker-android-sdk.git")
+                    developerConnection.set("scm:git:ssh://github.com:talker-network/talker-android-sdk.git")
+                    url.set("https://github.com/talker-network/talker-android-sdk")
                 }
             }
-
-
-
-
-
         }
     }
-//    repositories {
-//        maven {
-//            url = uri("${rootProject.buildDir}/maven-repo") // Local repository
-//        }
-//    }
     repositories {
         maven {
             name = "sonatype"
             url = uri("https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/")
             credentials {
-                username = "2UB4xnX3"
-                password = "Ygp/hTEkRdJeW3jle/Iwe6gDowuHZjYgJW5sHQ98tK"
+                username = System.getenv("MAVEN_USERNAME") ?: ""
+                password = System.getenv("MAVEN_PASSWORD") ?: ""
             }
         }
     }
-
-
 }
 signing {
     sign(publishing.publications["release"])

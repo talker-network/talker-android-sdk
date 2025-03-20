@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "330810363779",
-    "project_id": "talker-sdk-sample",
-    "storage_bucket": "talker-sdk-sample.appspot.com"
+    "project_number": "YOUR_PROJECT_NUMBER",
+    "project_id": "YOUR_PROJECT_ID",
+    "storage_bucket": "YOUR_PROJECT_ID.appspot.com"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:330810363779:android:f82682cd4fe74f4e5bf0b6",
+        "mobilesdk_app_id": "YOUR_MOBILE_SDK_APP_ID",
         "android_client_info": {
           "package_name": "com.talkersdk.sample"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAdLqf6DDkXr7h35-fJ1I4z2NlzCqF4rCY"
+          "current_key": "YOUR_API_KEY"
         }
       ],
       "services": {
